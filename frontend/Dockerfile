@@ -8,8 +8,8 @@ WORKDIR /app
 # Copy dependency files
 COPY package.json ./
 
-# Use npm install instead of npm ci to avoid lock file sync issues
-RUN npm install --production --no-optional
+# Use legacy-peer-deps to ignore version conflicts
+RUN npm install --production --no-optional --legacy-peer-deps
 
 # Build stage
 FROM base AS builder
@@ -19,8 +19,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Install all dependencies for build
-RUN npm install
+# Install all dependencies for build with legacy-peer-deps
+RUN npm install --legacy-peer-deps
 
 # Build the application
 RUN npm run build
