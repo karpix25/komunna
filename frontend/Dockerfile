@@ -35,8 +35,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copy public assets
-COPY --from=builder /app/public ./public
+# Create public directory if it doesn't exist and copy assets
+RUN mkdir -p ./public
+COPY --from=builder /app/public* ./public/ || true
 
 # Create .next directory and set permissions
 RUN mkdir .next
