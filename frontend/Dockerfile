@@ -1,30 +1,3 @@
-# Исправление поврежденного package-lock.json
-
-## 📝 Commit сообщение:
-```
-fix: remove corrupted package-lock.json and update Dockerfile
-
-- Delete package-lock.json with fake integrity checksums
-- Update Dockerfile to work without lock file
-- Use npm install to generate fresh lock file
-```
-
-## 🔧 Проблема:
-package-lock.json содержит поддельные integrity checksums (`sha512-example`), что вызывает ошибки.
-
-## ⚡ Решение:
-
-### Шаг 1: Удалить package-lock.json
-В GitHub:
-1. Перейдите в `frontend/`
-2. Нажмите на `package-lock.json`
-3. Нажмите иконку корзины (Delete this file)
-4. Коммит: `remove corrupted package-lock.json`
-
-### Шаг 2: Обновить Dockerfile
-Замените `frontend/Dockerfile`:
-
-```dockerfile
 FROM node:18-alpine AS base
 
 # Install dependencies only when needed
@@ -81,4 +54,3 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
 CMD ["node", "server.js"]
-```
