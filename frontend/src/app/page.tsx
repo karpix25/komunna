@@ -6,16 +6,19 @@ import { LoadingScreen } from '@/components/LoadingScreen'
 import { ErrorScreen } from '@/components/ErrorScreen'
 
 export default function Home() {
-  const { user, isInTelegram, isLoading, error } = useTelegram()
+  const { user, isInTelegram, isValidated, isLoading, error } = useTelegram()
 
+  // Показываем загрузку во время валидации
   if (isLoading) {
     return <LoadingScreen />
   }
 
-  if (error || !isInTelegram) {
-    return <ErrorScreen message={error || 'Приложение должно быть запущено из Telegram'} />
+  // Показываем ошибку если не в Telegram или валидация не прошла
+  if (error || !isInTelegram || !isValidated) {
+    return <ErrorScreen message={error || 'Доступ запрещен'} />
   }
 
+  // Если нет данных пользователя после успешной валидации
   if (!user) {
     return <ErrorScreen message="Не удалось получить данные пользователя" />
   }
@@ -37,7 +40,9 @@ export default function Home() {
         <div className="tg-card mb-6">
           <div className="text-center">
             <p className="tg-text text-base leading-relaxed mb-6">
-              Привет <span className="font-semibold tg-link">@{userDisplayName}</span>! 👋
+              Привет <span className="font-semibold tg-link">
+                {user.username ? `@${user.username}` : userDisplayName}
+              </span>! 👋
               <br /><br />
               Это сервис <span className="font-semibold">Kommuna</span> для обучения.
               <br /><br />
