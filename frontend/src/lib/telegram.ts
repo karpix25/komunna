@@ -57,17 +57,12 @@ async function request(endpoint: string, method: string = "GET", data?: any) {
     throw new Error('Telegram WebApp недоступен');
   }
 
-  const defaultHeaders = {
-    'ngrok-skip-browser-warning': 'true',
-    'Content-Type': 'application/json',
-  };
-
   const options: RequestInit = {
     method: method,
     headers: {
-      Authorization: tg.initData, // Передаем initData для валидации на бэкенде
+      'ngrok-skip-browser-warning': 'true',
       'Content-Type': 'application/json',
-      ...defaultHeaders,
+      Authorization: tg.initData, // Передаем initData для валидации на бэкенде
     },
   };
 
