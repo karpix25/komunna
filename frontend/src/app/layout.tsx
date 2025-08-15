@@ -1,12 +1,10 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
 import './globals.css'
 
-const inter = Inter({ subsets: ['latin'] })
-
 export const metadata: Metadata = {
-  title: 'MyApp',
-  description: 'Full-stack application template',
+  title: 'Kommuna - Сервис обучения',
+  description: 'Создавай курсы и увеличивай активность в сообществе',
+  viewport: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no',
 }
 
 export default function RootLayout({
@@ -15,8 +13,11 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>{children}</body>
+    <html lang="ru">
+      <head>
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+      </head>
+      <body>{children}</body>
     </html>
   )
 }
