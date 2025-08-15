@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: myapp_postgres_dev
+    environment:
+      POSTGRES_DB: myapp_dev
+      POSTGRES_USER: dev_user
+      POSTGRES_PASSWORD: dev_password
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - myapp_dev_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: myapp_redis_dev
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - myapp_dev_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: myapp_backend_dev
+    environment:
+      - DATABASE_URL=postgresql://dev_user:dev_password@postgres:5432/myapp_dev
+      - REDIS_URL=redis://redis:6379
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./backend/src:/app/src
+      - ./logs:/app/logs
+    ports:
+      - "8001:8000"
+    depends_on:
+      - postgres
+      - redis
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - myapp_dev_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: myapp_frontend_dev
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8001
+      - NEXT_PUBLIC_APP_NAME=MyApp Dev
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/package.json:/app/package.json
+    ports:
+      - "3001:3000"
+    command: npm run dev
+    networks:
+      - myapp_dev_network
+
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile.dev
+    container_name: myapp_bot_dev
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - API_URL=http://backend:8000
+      - DATABASE_URL=postgresql://dev_user:dev_password@postgres:5432/myapp_dev
+      - DEBUG=true
+    volumes:
+      - ./bot/src:/app/src
+      - ./logs:/app/logs
+    depends_on:
+      - postgres
+      - backend
+    networks:
+      - myapp_dev_network
+
+volumes:
+  postgres_dev_data:
+    driver: local
+  redis_dev_data:
+    driver: local
+
+networks:
+  myapp_dev_network:
+    driver: bridge
