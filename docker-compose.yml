@@ -51,22 +51,27 @@ services:
     networks:
       - myapp_network
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      no_cache: true
-    container_name: myapp_frontend
-    environment:
+frontend:
+  build:
+    context: ./frontend
+    dockerfile: Dockerfile
+    no_cache: true
+    args:
+      - BUILDKIT_INLINE_CACHE=0
       - NEXT_PUBLIC_API_URL=https://n8n-karpix-communa.g44y6r.easypanel.host
       - NEXT_PUBLIC_APP_NAME=Kommuna
-    depends_on:
-      - backend
-    ports:
-      - "3001:3000"
-    restart: unless-stopped
-    networks:
-      - myapp_network
+      - BUILD_DATE=2024-08-16-v2
+  container_name: myapp_frontend_v2
+  environment:
+    - NEXT_PUBLIC_API_URL=https://n8n-karpix-communa.g44y6r.easypanel.host
+    - NEXT_PUBLIC_APP_NAME=Kommuna
+  depends_on:
+    - backend
+  ports:
+    - "3001:3000"
+  restart: unless-stopped
+  networks:
+    - myapp_network
 
   bot:
     build:
