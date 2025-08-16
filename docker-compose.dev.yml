@@ -1,95 +1,94 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: myapp_postgres_dev
-    environment:
-      POSTGRES_DB: myapp_dev
-      POSTGRES_USER: dev_user
-      POSTGRES_PASSWORD: dev_password
-    volumes:
-      - postgres_dev_data:/var/lib/postgresql/data
-    ports:
-      - "5433:5432"
-    networks:
-      - myapp_dev_network
-
-  redis:
-    image: redis:7-alpine
-    container_name: myapp_redis_dev
-    ports:
-      - "6380:6379"
-    volumes:
-      - redis_dev_data:/data
-    networks:
-      - myapp_dev_network
-
+  # Backend API сервер для разработки
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
-    container_name: myapp_backend_dev
+    container_name: communaapp_backend_dev
+    ports:
+      - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://dev_user:dev_password@postgres:5432/myapp_dev
-      - REDIS_URL=redis://redis:6379
+      - ENVIRONMENT=development
       - DEBUG=true
-      - LOG_LEVEL=DEBUG
+      - RELOAD=true
+      - DB_HOST=postgres  # 🔄 Теперь подключаемся к нашему контейнеру
+      - DB_NAME=communaapp_dev
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres123
+      - DB_PORT=5432
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=fa11c75be6628d29470f634f78898ebe5672e642766311f5cc3b49698b1eea8f4ff6891486bf61ad006fd03dec7bb255ca9c92958eeddaa2a7f022306def5591
+      - ENCRYPTION_KEY=6c193a5c8ae272bc707b0999633a14d2
+      - TELEGRAM_WEBHOOK_DOMAIN=https://localhost
+      - TELEGRAM_WEBHOOK_SECRET=dev-webhook-secret
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=json
+      - UPLOAD_PATH=./uploads
+      - MAX_FILE_SIZE=52428800
+    depends_on:
+      - postgres  # 🔄 Ждем пока PostgreSQL запустится
+      - redis
     volumes:
       - ./backend/src:/app/src
       - ./logs:/app/logs
+      - ./uploads:/app/uploads
+    networks:
+      - communaapp_dev_network
+
+  # 🆕 НАШ СОБСТВЕННЫЙ POSTGRESQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: communaapp_postgres_dev
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=communaapp_dev
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres123
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d  # Для начальных данных (опционально)
     ports:
-      - "8001:8000"
+      - "5433:5432"  # Внешний порт 5433, чтобы не конфликтовать с вашей основной БД
+    networks:
+      - communaapp_dev_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis для разработки
+  redis:
+    image: redis:7-alpine
+    container_name: communaapp_redis_dev
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    networks:
+      - communaapp_dev_network
+
+  # Adminer для управления БД
+  adminer:
+    image: adminer
+    container_name: communaapp_adminer
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - ADMINER_DEFAULT_SERVER=postgres
+      - ADMINER_DESIGN=lucas
     depends_on:
       - postgres
-      - redis
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
     networks:
-      - myapp_dev_network
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.dev
-    container_name: myapp_frontend_dev
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8001
-      - NEXT_PUBLIC_APP_NAME=MyApp Dev
-    volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/public:/app/public
-      - ./frontend/package.json:/app/package.json
-    ports:
-      - "3001:3000"
-    command: npm run dev
-    networks:
-      - myapp_dev_network
-
-  bot:
-    build:
-      context: ./bot
-      dockerfile: Dockerfile.dev
-    container_name: myapp_bot_dev
-    environment:
-      - BOT_TOKEN=${BOT_TOKEN}
-      - API_URL=http://backend:8000
-      - DATABASE_URL=postgresql://dev_user:dev_password@postgres:5432/myapp_dev
-      - DEBUG=true
-    volumes:
-      - ./bot/src:/app/src
-      - ./logs:/app/logs
-    depends_on:
-      - postgres
-      - backend
-    networks:
-      - myapp_dev_network
+      - communaapp_dev_network
 
 volumes:
   postgres_dev_data:
     driver: local
-  redis_dev_data:
-    driver: local
 
 networks:
-  myapp_dev_network:
+  communaapp_dev_network:
     driver: bridge

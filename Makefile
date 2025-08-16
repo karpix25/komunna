@@ -1,105 +1,198 @@
-.PHONY: help build up down logs clean dev prod test lint format
+# Makefile for CommunaApp Backend
+# Набор команд для удобного управления проектом
 
-# Default environment
-ENV ?= dev
+.PHONY: help install dev prod test clean lint format
 
-help: ## Show this help message
-	@echo 'Usage: make [target] [ENV=dev|prod]'
-	@echo ''
-	@echo 'Targets:'
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+# Показывает список доступных команд
+help:
+	@echo "CommunaApp Backend - Доступные команды:"
+	@echo ""
+	@echo "  make install    - Установка зависимостей"
+	@echo "  make dev        - Запуск в режиме разработки"
+	@echo "  make prod       - Запуск в продакшн режиме"
+	@echo "  make test       - Запуск тестов"
+	@echo "  make lint       - Проверка кода линтерами"
+	@echo "  make format     - Форматирование кода"
+	@echo "  make clean      - Очистка временных файлов"
+	@echo "  make db-init    - Инициализация базы данных"
+	@echo "  make db-migrate - Создание миграций"
+	@echo "  make db-upgrade - Применение миграций"
+	@echo "  make logs       - Просмотр логов"
+	@echo ""
 
-setup: ## Initial project setup
-	@echo "Setting up the project..."
-	@cp .env.example .env
-	@cp frontend/.env.local.example frontend/.env.local
-	@cp backend/.env.example backend/.env
-	@cp bot/.env.example bot/.env
-	@chmod +x scripts/*.sh
-	@echo "✅ Project setup complete!"
-	@echo "📝 Please edit .env files with your configuration"
+# Установка зависимостей
+install:
+	@echo "📦 Установка зависимостей..."
+	pip install --upgrade pip
+	pip install -r requirements.txt
+	pip install -r requirements-dev.txt
+	@echo "✅ Зависимости установлены"
 
-build: ## Build all services
-	docker-compose -f docker-compose.$(ENV).yml build
+# Запуск в режиме разработки
+dev:
+	@echo "🚀 Запуск в режиме разработки..."
+	docker-compose -f docker-compose.dev.yml up --build
 
-up: ## Start all services
-	docker-compose -f docker-compose.$(ENV).yml up -d
+# Запуск в фоне для разработки
+dev-d:
+	@echo "🚀 Запуск в фоне (режим разработки)..."
+	docker-compose -f docker-compose.dev.yml up -d --build
 
-down: ## Stop all services
-	docker-compose -f docker-compose.$(ENV).yml down
+# Остановка dev среды
+dev-stop:
+	@echo "🛑 Остановка dev среды..."
+	docker-compose -f docker-compose.dev.yml down
 
-logs: ## View logs for all services
-	docker-compose -f docker-compose.$(ENV).yml logs -f
+# Запуск в продакшн режиме
+prod:
+	@echo "🚀 Запуск в продакшн режиме..."
+	docker-compose up -d --build
 
-restart: ## Restart all services
-	make down ENV=$(ENV)
-	make up ENV=$(ENV)
+# Остановка prod среды
+prod-stop:
+	@echo "🛑 Остановка prod среды..."
+	docker-compose down
 
-clean: ## Remove all containers, networks, and volumes
-	docker-compose -f docker-compose.$(ENV).yml down -v --remove-orphans
-	docker system prune -a -f
+# Запуск тестов
+test:
+	@echo "🧪 Запуск тестов..."
+	pytest tests/ -v --cov=src --cov-report=html
 
-# Development commands
-dev: ## Start development environment
-	make up ENV=dev
+# Проверка кода линтерами
+lint:
+	@echo "🔍 Проверка кода..."
+	flake8 src/ tests/
+	mypy src/
+	@echo "✅ Проверка завершена"
 
-dev-logs: ## View development logs
-	make logs ENV=dev
+# Форматирование кода
+format:
+	@echo "✨ Форматирование кода..."
+	black src/ tests/
+	isort src/ tests/
+	@echo "✅ Код отформатирован"
 
-dev-clean: ## Clean development environment
-	make clean ENV=dev
+# Очистка временных файлов
+clean:
+	@echo "🧹 Очистка временных файлов..."
+	find . -type f -name "*.pyc" -delete
+	find . -type d -name "__pycache__" -delete
+	find . -type d -name "*.egg-info" -exec rm -rf {} +
+	find . -type d -name ".pytest_cache" -exec rm -rf {} +
+	find . -type d -name ".mypy_cache" -exec rm -rf {} +
+	rm -rf htmlcov/
+	rm -rf .coverage
+	@echo "✅ Очистка завершена"
 
-# Production commands
-prod: ## Start production environment
-	make up ENV=prod
+# Инициализация базы данных
+db-init:
+	@echo "📊 Инициализация базы данных..."
+	python -c "from src.database import init_database; import asyncio; asyncio.run(init_database())"
+	@echo "✅ База данных инициализирована"
 
-prod-logs: ## View production logs
-	make logs ENV=prod
+# Создание новой миграции
+db-migrate:
+	@echo "📝 Создание миграции..."
+	@read -p "Введите описание миграции: " desc; \
+	alembic revision --autogenerate -m "$$desc"
+	@echo "✅ Миграция создана"
 
-# Database commands
-db-migrate: ## Run database migrations
-	docker-compose -f docker-compose.$(ENV).yml exec backend alembic upgrade head
+# Применение миграций
+db-upgrade:
+	@echo "⬆️ Применение миграций..."
+	alembic upgrade head
+	@echo "✅ Миграции применены"
 
-db-reset: ## Reset database
-	docker-compose -f docker-compose.$(ENV).yml exec backend alembic downgrade base
-	docker-compose -f docker-compose.$(ENV).yml exec backend alembic upgrade head
+# Откат миграций
+db-downgrade:
+	@echo "⬇️ Откат миграций..."
+	@read -p "На сколько шагов откатить? " steps; \
+	alembic downgrade -$$steps
+	@echo "✅ Откат завершен"
 
-db-seed: ## Seed database with test data
-	docker-compose -f docker-compose.$(ENV).yml exec backend python -m src.scripts.seed_db
+# Просмотр логов
+logs:
+	@echo "📋 Просмотр логов..."
+	docker-compose logs -f backend
 
-# Testing commands
-test: ## Run all tests
-	docker-compose -f docker-compose.$(ENV).yml exec backend pytest
-	docker-compose -f docker-compose.$(ENV).yml exec frontend npm test
-	docker-compose -f docker-compose.$(ENV).yml exec bot python -m pytest
+# Просмотр логов dev среды
+logs-dev:
+	@echo "📋 Просмотр логов (dev)..."
+	docker-compose -f docker-compose.dev.yml logs -f backend
 
-test-backend: ## Run backend tests
-	docker-compose -f docker-compose.$(ENV).yml exec backend pytest
+# Подключение к контейнеру backend
+shell:
+	@echo "💻 Подключение к backend контейнеру..."
+	docker-compose exec backend bash
 
-test-frontend: ## Run frontend tests
-	docker-compose -f docker-compose.$(ENV).yml exec frontend npm test
+# Подключение к dev контейнеру
+shell-dev:
+	@echo "💻 Подключение к backend dev контейнеру..."
+	docker-compose -f docker-compose.dev.yml exec backend bash
 
-test-bot: ## Run bot tests
-	docker-compose -f docker-compose.$(ENV).yml exec bot python -m pytest
+# Подключение к базе данных
+db-shell:
+	@echo "💾 Подключение к базе данных..."
+	docker-compose exec postgres psql -U postgres -d communaapp
 
-# Code quality commands
-lint: ## Run linters
-	docker-compose -f docker-compose.$(ENV).yml exec backend black . && flake8
-	docker-compose -f docker-compose.$(ENV).yml exec frontend npm run lint
-	docker-compose -f docker-compose.$(ENV).yml exec bot black . && flake8
+# Подключение к dev базе данных
+db-shell-dev:
+	@echo "💾 Подключение к dev базе данных..."
+	docker-compose -f docker-compose.dev.yml exec postgres psql -U postgres -d communaapp_dev
 
-format: ## Format code
-	docker-compose -f docker-compose.$(ENV).yml exec backend black .
-	docker-compose -f docker-compose.$(ENV).yml exec frontend npm run format
-	docker-compose -f docker-compose.$(ENV).yml exec bot black .
+# Создание резервной копии БД
+db-backup:
+	@echo "💾 Создание резервной копии..."
+	@timestamp=$$(date +%Y%m%d_%H%M%S); \
+	docker-compose exec postgres pg_dump -U postgres communaapp > database/backups/backup_$$timestamp.sql
+	@echo "✅ Резервная копия создана"
 
-# Backup and restore
-backup: ## Backup database
-	./scripts/backup-db.sh
+# Восстановление из резервной копии
+db-restore:
+	@echo "📥 Восстановление из резервной копии..."
+	@ls database/backups/
+	@read -p "Введите имя файла резервной копии: " filename; \
+	docker-compose exec -T postgres psql -U postgres communaapp < database/backups/$$filename
+	@echo "✅ Восстановление завершено"
 
-restore: ## Restore database from backup
-	./scripts/restore-db.sh $(FILE)
+# Полная перезагрузка dev среды
+dev-reset:
+	@echo "🔄 Полная перезагрузка dev среды..."
+	docker-compose -f docker-compose.dev.yml down -v
+	docker-compose -f docker-compose.dev.yml up --build -d
+	@echo "✅ Dev среда перезагружена"
 
-# EasyPanel deployment
-deploy: ## Deploy to EasyPanel
-	./scripts/deploy.sh
+# Мониторинг ресурсов
+monitor:
+	@echo "📊 Мониторинг ресурсов..."
+	docker stats
+
+# Проверка состояния сервисов
+status:
+	@echo "🔍 Состояние сервисов..."
+	docker-compose ps
+
+# Обновление зависимостей
+update-deps:
+	@echo "📦 Обновление зависимостей..."
+	pip-compile requirements.in
+	pip-compile requirements-dev.in
+	@echo "✅ Зависимости обновлены"
+
+# Генерация документации
+docs:
+	@echo "📚 Генерация документации..."
+	mkdocs build
+	@echo "✅ Документация сгенерирована"
+
+# Запуск локального сервера документации
+docs-serve:
+	@echo "📚 Запуск сервера документации..."
+	mkdocs serve
+
+# Безопасность - сканирование зависимостей
+security-check:
+	@echo "🔒 Проверка безопасности..."
+	safety check
+	bandit -r src/
+	@echo "✅ Проверка безопасности завершена"

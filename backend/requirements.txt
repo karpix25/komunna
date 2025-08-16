@@ -1,16 +1,45 @@
+# FastAPI и веб-сервер
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
+
+# База данных и ORM
 sqlalchemy==2.0.23
-alembic==1.12.1
-psycopg2-binary==2.9.9
-redis==5.0.1
-python-multipart==0.0.6
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
+asyncpg==0.29.0              # Асинхронный PostgreSQL драйвер
+alembic==1.12.1              # Миграции БД
+
+# Валидация данных
 pydantic==2.5.0
 pydantic-settings==2.1.0
+
+# Безопасность и авторизация
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# HTTP клиент для внешних API
 httpx==0.25.2
-celery==5.3.4
-pytest==7.4.3
-pytest-asyncio==0.21.1
-loguru==0.7.2
+
+# Работа с JSON и датами
+python-json-logger==2.0.7
+python-dateutil==2.8.2
+
+# Криптография
+cryptography==41.0.7
+
+# Переменные окружения
+python-dotenv==1.0.0
+
+# Логирование
+structlog==23.2.0
+
+# Генерация UUID
+uuid7==0.1.0
+
+# Работа с изображениями (для обработки фото профилей)
+Pillow==10.1.0
+
+# Кэширование
+redis==5.0.1
+
+# Валидация конфигурации
+typing-extensions==4.8.0

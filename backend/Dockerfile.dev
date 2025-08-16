@@ -1,23 +1,38 @@
+# Dockerfile для разработки с автоперезагрузкой
 FROM python:3.11-slim
 
+# Устанавливаем переменные окружения для разработки
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    ENVIRONMENT=development
+
+# Устанавливаем рабочую директорию
 WORKDIR /app
 
-# Install system dependencies
+# Устанавливаем системные зависимости
 RUN apt-get update && apt-get install -y \
-    gcc \
-    postgresql-dev \
+    build-essential \
+    curl \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
+# Копируем файлы зависимостей
 COPY requirements.txt requirements-dev.txt ./
-RUN pip install --no-cache-dir -r requirements-dev.txt
 
-# Copy source code
-COPY . .
+# Устанавливаем все зависимости (включая dev)
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r requirements-dev.txt
 
-# Create logs directory
-RUN mkdir -p /app/logs
+# Создаем директории
+RUN mkdir -p logs uploads
 
+# Копируем исходный код (в dev режиме будет монтироваться как volume)
+COPY src/ ./src/
+
+# Открываем порт
 EXPOSE 8000
 
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Команда для разработки с автоперезагрузкой
+CMD ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
