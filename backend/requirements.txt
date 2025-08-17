@@ -4,8 +4,8 @@ uvicorn[standard]==0.24.0
 
 # База данных и ORM
 sqlalchemy==2.0.23
-asyncpg==0.29.0              # Асинхронный PostgreSQL драйвер
-alembic==1.12.1              # Миграции БД
+asyncpg==0.29.0
+alembic==1.12.1
 
 # Валидация данных
 pydantic==2.5.0
@@ -43,3 +43,6 @@ redis==5.0.1
 
 # Валидация конфигурации
 typing-extensions==4.8.0
+
+# Telegram бот библиотека
+aiogram==3.2.0

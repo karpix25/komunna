@@ -69,6 +69,8 @@ class TelegramSettings(BaseSettings):
     webhook_domain: str = Field(description="Домен для webhook URL")
     webhook_secret: str = Field(description="Секрет для webhook безопасности")
 
+    main_bot_token: Optional[str] = Field(None, description="Токен главного бота приложения")
+
     @property
     def webhook_base_url(self) -> str:
         """Базовый URL для webhooks."""

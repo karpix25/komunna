@@ -196,3 +196,219 @@ security-check:
 	safety check
 	bandit -r src/
 	@echo "✅ Проверка безопасности завершена"
+
+# Добавьте эти команды в ваш Makefile
+
+# ========================================
+# TELEGRAM BOT УПРАВЛЕНИЕ
+# ========================================
+
+# Создание бота у @BotFather
+create-bot:
+	@echo "🤖 Инструкция по созданию Telegram бота:"
+	@echo "1. Откройте Telegram и найдите @BotFather"
+	@echo "2. Отправьте команду /newbot"
+	@echo "3. Введите название бота (например: Communa Validator Bot)"
+	@echo "4. Введите username бота (например: communa_validator_bot)"
+	@echo "5. Скопируйте токен и добавьте в .env файл:"
+	@echo "   TELEGRAM_BOT_TOKEN=ваш_токен_здесь"
+	@echo "6. Запустите: make setup-bot"
+
+# Настройка bot сервиса
+setup-bot:
+	@echo "⚙️ Настройка Telegram bot сервиса..."
+	@mkdir -p bot/src
+	@cp .env.example bot/.env.example 2>/dev/null || echo "Создайте bot/.env.example"
+	@echo "✅ Структура bot сервиса создана"
+	@echo "📝 Не забудьте добавить TELEGRAM_BOT_TOKEN в .env файл!"
+
+# Запуск только bot сервиса
+start-bot:
+	@echo "🚀 Запуск Telegram bot..."
+	@docker-compose up bot -d
+	@echo "✅ Bot запущен в фоновом режиме"
+
+# Остановка bot сервиса
+stop-bot:
+	@echo "⏹️ Остановка Telegram bot..."
+	@docker-compose stop bot
+	@echo "✅ Bot остановлен"
+
+# Перезапуск bot сервиса
+restart-bot:
+	@echo "🔄 Перезапуск Telegram bot..."
+	@docker-compose restart bot
+	@echo "✅ Bot перезапущен"
+
+# Логи bot сервиса
+logs-bot:
+	@echo "📊 Логи Telegram bot:"
+	@docker-compose logs -f bot
+
+# Логи bot за последние 50 строк
+logs-bot-tail:
+	@echo "📊 Последние логи Telegram bot:"
+	@docker-compose logs --tail=50 bot
+
+# Статус bot сервиса
+status-bot:
+	@echo "📈 Статус Telegram bot:"
+	@docker-compose ps bot
+
+# Подключение к контейнеру bot
+shell-bot:
+	@echo "🐚 Подключение к контейнеру bot..."
+	@docker-compose exec bot /bin/bash
+
+# Тестирование bot API
+test-bot-api:
+	@echo "🧪 Тестирование Telegram Bot API..."
+	@curl -X GET "http://localhost:8000/api/v1/telegram/bot-status" \
+		-H "Authorization: Bearer your_token_here" \
+		-H "Content-Type: application/json" \
+		-w "\n📊 Статус ответа: %{http_code}\n" \
+		-s -S || echo "❌ Ошибка подключения к API"
+
+# Тестирование валидации через bot
+test-bot-validate:
+	@echo "🧪 Тестирование валидации через Telegram Bot..."
+	@read -p "Введите Telegram ID для тестирования: " telegram_id; \
+	curl -X POST "http://localhost:8000/api/v1/telegram/validate" \
+		-H "Authorization: Bearer your_token_here" \
+		-H "Content-Type: application/json" \
+		-d '{"telegram_id": "'$telegram_id'", "request_confirmation": false}' \
+		-w "\n📊 Статус ответа: %{http_code}\n" \
+		-s -S | jq '.' || echo "❌ Ошибка при валидации"
+
+# Полный запуск с bot
+dev-with-bot:
+	@echo "🚀 Запуск полной системы с Telegram Bot..."
+	@docker-compose -f docker-compose.dev.yml up backend bot database -d
+	@echo "✅ Система запущена:"
+	@echo "  🔗 Backend: http://localhost:8000"
+	@echo "  🔗 API Docs: http://localhost:8000/docs"
+	@echo "  🤖 Telegram Bot: активен"
+	@echo "  📊 Логи: make logs-bot"
+
+# Проверка конфигурации bot
+check-bot-config:
+	@echo "🔍 Проверка конфигурации Telegram Bot..."
+	@if [ -f .env ]; then \
+		if grep -q "TELEGRAM_BOT_TOKEN=" .env; then \
+			echo "✅ TELEGRAM_BOT_TOKEN найден в .env"; \
+		else \
+			echo "❌ TELEGRAM_BOT_TOKEN не найден в .env"; \
+			echo "💡 Добавьте: TELEGRAM_BOT_TOKEN=ваш_токен"; \
+		fi; \
+	else \
+		echo "❌ Файл .env не найден"; \
+		echo "💡 Создайте .env файл на основе .env.example"; \
+	fi
+	@if [ -d bot/ ]; then \
+		echo "✅ Папка bot/ существует"; \
+	else \
+		echo "❌ Папка bot/ не найдена"; \
+		echo "💡 Запустите: make setup-bot"; \
+	fi
+
+# Очистка bot данных
+clean-bot:
+	@echo "🧹 Очистка данных Telegram Bot..."
+	@docker-compose down bot
+	@docker-compose rm -f bot
+	@echo "✅ Данные bot очищены"
+
+# Полная переустановка bot
+reinstall-bot: clean-bot setup-bot start-bot
+	@echo "🔄 Bot полностью переустановлен"
+
+# Мониторинг bot в реальном времени
+monitor-bot:
+	@echo "📊 Мониторинг Telegram Bot в реальном времени..."
+	@echo "Нажмите Ctrl+C для выхода"
+	@while true; do \
+		clear; \
+		echo "🤖 TELEGRAM BOT MONITOR - $(date)"; \
+		echo "=========================================="; \
+		docker-compose ps bot; \
+		echo ""; \
+		echo "📊 Последние логи:"; \
+		docker-compose logs --tail=10 bot; \
+		echo ""; \
+		echo "🔄 Обновление через 5 секунд..."; \
+		sleep 5; \
+	done
+
+# Отправка тестового сообщения через bot
+send-test-message:
+	@echo "📤 Отправка тестового сообщения через Telegram Bot..."
+	@read -p "Введите Telegram ID получателя: " telegram_id; \
+	read -p "Введите сообщение: " message; \
+	curl -X POST "http://localhost:8000/api/v1/telegram/send-message/$telegram_id" \
+		-H "Authorization: Bearer your_token_here" \
+		-H "Content-Type: application/json" \
+		-d '{"message": "'$message'"}' \
+		-w "\n📊 Статус ответа: %{http_code}\n" \
+		-s -S | jq '.' || echo "❌ Ошибка отправки сообщения"
+
+# ========================================
+# КОМПЛЕКСНЫЕ КОМАНДЫ
+# ========================================
+
+# Полная настройка проекта с bot
+full-setup: setup-bot check-bot-config
+	@echo "🎯 Полная настройка проекта с Telegram Bot завершена!"
+	@echo ""
+	@echo "📋 Следующие шаги:"
+	@echo "1. Добавьте TELEGRAM_BOT_TOKEN в .env файл"
+	@echo "2. Запустите: make dev-with-bot"
+	@echo "3. Протестируйте: make test-bot-validate"
+	@echo "4. Мониторинг: make monitor-bot"
+
+# Быстрая диагностика всей системы
+diagnose:
+	@echo "🔍 Диагностика системы..."
+	@echo "=========================="
+	@echo ""
+	@echo "📊 Статус контейнеров:"
+	@docker-compose ps
+	@echo ""
+	@echo "🔧 Конфигурация bot:"
+	@make check-bot-config
+	@echo ""
+	@echo "🌐 Тест API:"
+	@curl -X GET "http://localhost:8000/health" -w " (Статус: %{http_code})\n" -s -S 2>/dev/null || echo "❌ Backend недоступен"
+	@echo ""
+	@echo "🤖 Статус Telegram Bot:"
+	@curl -X GET "http://localhost:8000/api/v1/telegram/bot-status" -H "Authorization: Bearer test" -w " (Статус: %{http_code})\n" -s -S 2>/dev/null || echo "❌ Bot API недоступен"
+
+# Помощь по bot командам
+help-bot:
+	@echo "🤖 Доступные команды для Telegram Bot:"
+	@echo "======================================"
+	@echo ""
+	@echo "📦 Настройка:"
+	@echo "  make create-bot          - Инструкция создания бота"
+	@echo "  make setup-bot           - Настройка структуры bot сервиса"
+	@echo "  make check-bot-config    - Проверка конфигурации"
+	@echo ""
+	@echo "🚀 Управление:"
+	@echo "  make start-bot           - Запуск bot сервиса"
+	@echo "  make stop-bot            - Остановка bot сервиса"
+	@echo "  make restart-bot         - Перезапуск bot сервиса"
+	@echo "  make dev-with-bot        - Запуск всей системы с bot"
+	@echo ""
+	@echo "🧪 Тестирование:"
+	@echo "  make test-bot-api        - Тест bot API"
+	@echo "  make test-bot-validate   - Тест валидации через bot"
+	@echo "  make send-test-message   - Отправка тестового сообщения"
+	@echo ""
+	@echo "📊 Мониторинг:"
+	@echo "  make logs-bot            - Логи bot сервиса"
+	@echo "  make status-bot          - Статус bot сервиса"
+	@echo "  make monitor-bot         - Мониторинг в реальном времени"
+	@echo ""
+	@echo "🔧 Обслуживание:"
+	@echo "  make clean-bot           - Очистка bot данных"
+	@echo "  make reinstall-bot       - Полная переустановка"
+	@echo "  make diagnose            - Диагностика всей системы"

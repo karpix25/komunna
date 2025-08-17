@@ -254,9 +254,9 @@ def setup_routes(app: FastAPI) -> None:
             "timestamp": datetime.utcnow().isoformat()
         }
 
-    # Здесь будут подключаться API роуты
-    # from .api.v1.router import api_router
-    # app.include_router(api_router, prefix=f"/api/{settings.app.api_version}")
+    # 🆕 ДОБАВЛЕНО: Подключаем API роуты
+    from .api.v1.router import api_router
+    app.include_router(api_router, prefix="/api/v1")
 
     # Пока добавляем базовые роуты для тестирования
     setup_test_routes(app)
