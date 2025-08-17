@@ -6,7 +6,7 @@
 import logging
 from typing import Optional
 
-from aiogram.utils.web_app import safe_parse_webapp_init_data
+from aiogram.utils.web_app import safe_parse_webapp_init_data, WebAppInitData
 from aiogram.types import User as AiogramUser
 
 from ..schemas.telegram import WebAppUser, TelegramUserSchema
@@ -33,7 +33,7 @@ class TelegramAuthService:
         logger.info(f"🤖 Инициализирован {bot_type} Telegram сервис" +
                    (f" для сообщества {community_id}" if community_id else ""))
 
-    def verify_webapp_init_data(self, init_data: str) -> Optional[AiogramUser]:
+    def verify_webapp_init_data(self, init_data: str) -> Optional[WebAppInitData]:
         """
         Проверяет подлинность данных Telegram WebApp.
 
@@ -65,7 +65,7 @@ class TelegramAuthService:
             logger.error(f"❌ Ошибка валидации WebApp данных для {self.bot_type} бота: {e}")
             return None
 
-    def get_user_from_telegram_data(self, telegram_user: AiogramUser) -> WebAppUser:
+    def get_user_from_telegram_data(self, telegram_user: WebAppUser) -> WebAppUser:
         """
         Преобразует данные Telegram пользователя в нашу модель.
 
@@ -83,7 +83,7 @@ class TelegramAuthService:
             language_code=telegram_user.language_code,
             is_premium=telegram_user.is_premium or False,
             allows_write_to_pm=getattr(telegram_user, 'allows_write_to_pm', None),
-            photo_url=None  # aiogram не предоставляет photo_url напрямую
+            photo_url=getattr(telegram_user, 'photo_url', None),  # aiogram не предоставляет photo_url напрямую
         )
 
     def convert_to_frontend_schema(self, webapp_user: WebAppUser) -> TelegramUserSchema:

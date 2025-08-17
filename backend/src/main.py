@@ -126,8 +126,9 @@ def setup_middleware(app: FastAPI) -> None:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"] if settings.app.is_development else [
-            "https://yourdomain.com",  # Замените на ваш домен
-            "https://www.yourdomain.com"
+            "http://localhost:3000",  # Замените на ваш домен
+            "http://127.0.0.1:3000",
+            "https://83e3a3ad885a.ngrok-free.app"
         ],
         allow_credentials=True,
         allow_methods=["*"],
@@ -138,7 +139,7 @@ def setup_middleware(app: FastAPI) -> None:
     if settings.app.is_production:
         app.add_middleware(
             TrustedHostMiddleware,
-            allowed_hosts=["yourdomain.com", "*.yourdomain.com"]  # Замените на ваши домены
+            allowed_hosts=["localhost:3000", "127.0.0.1:3000",  "83e3a3ad885a.ngrok-free.app"]  # Замените на ваши домены
         )
 
     # Добавляем custom middleware для логирования запросов
@@ -256,7 +257,9 @@ def setup_routes(app: FastAPI) -> None:
 
     # 🆕 ДОБАВЛЕНО: Подключаем API роуты
     from .api.v1.router import api_router
+    from .api import api_router
     app.include_router(api_router, prefix="/api/v1")
+    app.include_router(api_router, prefix="/api")
 
     # Пока добавляем базовые роуты для тестирования
     setup_test_routes(app)

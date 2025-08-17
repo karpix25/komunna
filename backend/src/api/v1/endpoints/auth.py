@@ -19,7 +19,7 @@ from ....core.auth_detector import auth_detector  # 🔄 ДОБАВЛЕНО
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["Authentication"])
 
 
 @router.post(
