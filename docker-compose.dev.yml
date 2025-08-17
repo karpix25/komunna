@@ -1,5 +1,4 @@
-version: '3.8'
-
+# docker-compose.dev.yml
 services:
   # Backend API сервер для разработки
   backend:
@@ -13,54 +12,77 @@ services:
       - ENVIRONMENT=development
       - DEBUG=true
       - RELOAD=true
-      - DB_HOST=postgres  # 🔄 Теперь подключаемся к нашему контейнеру
-      - DB_NAME=communaapp_dev
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres123
+      - DB_HOST=postgres
+      - DB_NAME=kommuna
+      - DB_USER=owner
+      - DB_PASSWORD=Gfhjkm123.
       - DB_PORT=5432
       - REDIS_URL=redis://redis:6379/0
       - JWT_SECRET_KEY=fa11c75be6628d29470f634f78898ebe5672e642766311f5cc3b49698b1eea8f4ff6891486bf61ad006fd03dec7bb255ca9c92958eeddaa2a7f022306def5591
       - ENCRYPTION_KEY=6c193a5c8ae272bc707b0999633a14d2
       - TELEGRAM_WEBHOOK_DOMAIN=https://localhost
       - TELEGRAM_WEBHOOK_SECRET=dev-webhook-secret
+      - TELEGRAM_MAIN_BOT_TOKEN=${TELEGRAM_MAIN_BOT_TOKEN}
       - LOG_LEVEL=INFO
       - LOG_FORMAT=json
       - UPLOAD_PATH=./uploads
       - MAX_FILE_SIZE=52428800
     depends_on:
-      - postgres  # 🔄 Ждем пока PostgreSQL запустится
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     volumes:
       - ./backend/src:/app/src
       - ./logs:/app/logs
       - ./uploads:/app/uploads
     networks:
       - communaapp_dev_network
+    restart: unless-stopped
 
-  # 🆕 НАШ СОБСТВЕННЫЙ POSTGRESQL
+  # 🤖 TELEGRAM BOT СЕРВИС
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile.dev
+    container_name: communaapp_bot_dev
+    environment:
+      - TELEGRAM_MAIN_BOT_TOKEN=${TELEGRAM_MAIN_BOT_TOKEN}
+      - BACKEND_URL=http://backend:8000
+      - LOG_LEVEL=INFO
+    depends_on:
+      backend:
+        condition: service_started
+    volumes:
+      - ./bot/src:/app/src
+    networks:
+      - communaapp_dev_network
+    restart: unless-stopped
+
+  # PostgreSQL
   postgres:
     image: postgres:15-alpine
     container_name: communaapp_postgres_dev
     restart: unless-stopped
     environment:
-      - POSTGRES_DB=communaapp_dev
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres123
+      - POSTGRES_DB=kommuna
+      - POSTGRES_USER=owner
+      - POSTGRES_PASSWORD=Gfhjkm123.
       - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
-      - ./database/init:/docker-entrypoint-initdb.d  # Для начальных данных (опционально)
+      - ./database/init:/docker-entrypoint-initdb.d
     ports:
-      - "5433:5432"  # Внешний порт 5433, чтобы не конфликтовать с вашей основной БД
+      - "5433:5432"
     networks:
       - communaapp_dev_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U owner -d kommuna"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # Redis для разработки
+  # Redis
   redis:
     image: redis:7-alpine
     container_name: communaapp_redis_dev
@@ -70,7 +92,7 @@ services:
     networks:
       - communaapp_dev_network
 
-  # Adminer для управления БД
+  # Adminer
   adminer:
     image: adminer
     container_name: communaapp_adminer

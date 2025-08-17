@@ -125,10 +125,7 @@ export class TelegramWebApp {
       // Отправляем initData на бэкенд для валидации
       const response = await request('auth/telegram/validate', 'POST');
       
-      return {
-        valid: true,
-        user: response.user
-      };
+      return response
     } catch (error) {
       return {
         valid: false,

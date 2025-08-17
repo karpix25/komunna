@@ -1,8 +1,6 @@
+# backend/src/config.py
 """
-Конфигурация приложения.
-
-Этот файл отвечает за загрузку и валидацию всех настроек приложения
-из переменных окружения. Использует Pydantic для автоматической валидации.
+Конфигурация приложения с правильными настройками БД.
 """
 
 from typing import Literal, Optional
@@ -13,16 +11,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class DatabaseSettings(BaseSettings):
     """Настройки подключения к базе данных PostgreSQL."""
 
-    host: str = Field(default="localhost", description="Хост базы данных")
+    host: str = Field(default="postgres", description="Хост базы данных")
     port: int = Field(default=5432, description="Порт базы данных")
-    name: str = Field(default="communaapp", description="Имя базы данных")
-    user: str = Field(default="postgres", description="Пользователь БД")
-    password: str = Field(description="Пароль БД")
+    name: str = Field(default="kommuna", description="Имя базы данных")
+    user: str = Field(default="owner", description="Пользователь БД")
+    password: str = Field(default="Gfhjkm123.", description="Пароль БД")
 
     # Настройки пула подключений
-    pool_size: int = Field(default=20, description="Размер пула подключений")
-    max_overflow: int = Field(default=30, description="Максимальное количество дополнительных подключений")
-    connect_timeout: int = Field(default=30, description="Таймаут подключения в секундах")
+    pool_size: int = Field(default=5, description="Размер пула подключений")
+    max_overflow: int = Field(default=10, description="Максимальное количество дополнительных подключений")
+    connect_timeout: int = Field(default=60, description="Таймаут подключения в секундах")
 
     @property
     def url(self) -> str:
@@ -37,38 +35,11 @@ class DatabaseSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DB_")
 
 
-class RedisSettings(BaseSettings):
-    """Настройки подключения к Redis."""
-
-    url: str = Field(default="redis://localhost:6379/0", description="URL подключения к Redis")
-    cache_ttl: int = Field(default=3600, description="Время жизни кэша по умолчанию (сек)")
-
-    model_config = SettingsConfigDict(env_prefix="REDIS_")
-
-
-class SecuritySettings(BaseSettings):
-    """Настройки безопасности и авторизации."""
-
-    jwt_secret_key: str = Field(description="Секретный ключ для JWT токенов")
-    jwt_algorithm: str = Field(default="HS256", description="Алгоритм шифрования JWT")
-    jwt_access_token_expire_minutes: int = Field(default=1440, description="Время жизни JWT токена (мин)")
-    encryption_key: str = Field(description="Ключ для шифрования конфиденциальных данных")
-
-    @field_validator("encryption_key")
-    @classmethod
-    def validate_encryption_key_length(cls, v: str) -> str:
-        """Проверяет, что ключ шифрования имеет правильную длину."""
-        if len(v) != 32:
-            raise ValueError("Ключ шифрования должен быть длиной 32 символа")
-        return v
-
-
 class TelegramSettings(BaseSettings):
     """Настройки для работы с Telegram API."""
 
-    webhook_domain: str = Field(description="Домен для webhook URL")
-    webhook_secret: str = Field(description="Секрет для webhook безопасности")
-
+    webhook_domain: str = Field(default="https://localhost", description="Домен для webhook URL")
+    webhook_secret: str = Field(default="dev-webhook-secret", description="Секрет для webhook безопасности")
     main_bot_token: Optional[str] = Field(None, description="Токен главного бота приложения")
 
     @property
@@ -79,35 +50,27 @@ class TelegramSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="TELEGRAM_")
 
 
-class FileStorageSettings(BaseSettings):
-    """Настройки файлового хранилища."""
+class SecuritySettings(BaseSettings):
+    """Настройки безопасности и авторизации."""
 
-    upload_path: str = Field(default="./uploads", description="Путь для загрузки файлов")
-    max_file_size: int = Field(default=52428800, description="Максимальный размер файла (байты)")
-    allowed_file_types: str = Field(
-        default="jpg,jpeg,png,gif,pdf,mp4,mp3,docx,xlsx",
-        description="Разрешенные типы файлов"
+    jwt_secret_key: str = Field(
+        default="fa11c75be6628d29470f634f78898ebe5672e642766311f5cc3b49698b1eea8f4ff6891486bf61ad006fd03dec7bb255ca9c92958eeddaa2a7f022306def5591",
+        description="Секретный ключ для JWT токенов"
+    )
+    jwt_algorithm: str = Field(default="HS256", description="Алгоритм шифрования JWT")
+    jwt_access_token_expire_minutes: int = Field(default=1440, description="Время жизни JWT токена (мин)")
+    encryption_key: str = Field(
+        default="6c193a5c8ae272bc707b0999633a14d2",
+        description="Ключ для шифрования конфиденциальных данных"
     )
 
-    @property
-    def allowed_extensions(self) -> set[str]:
-        """Возвращает множество разрешенных расширений файлов."""
-        return set(ext.strip().lower() for ext in self.allowed_file_types.split(','))
-
-    model_config = SettingsConfigDict(env_prefix="UPLOAD_")
-
-
-class LoggingSettings(BaseSettings):
-    """Настройки логирования."""
-
-    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
-        default="INFO",
-        description="Уровень логирования"
-    )
-    format: Literal["json", "text"] = Field(default="json", description="Формат логов")
-    file: Optional[str] = Field(default="logs/app.log", description="Файл для записи логов")
-
-    model_config = SettingsConfigDict(env_prefix="LOG_")
+    @field_validator("encryption_key")
+    @classmethod
+    def validate_encryption_key_length(cls, v: str) -> str:
+        """Проверяет, что ключ шифрования имеет правильную длину."""
+        if len(v) != 32:
+            raise ValueError("Ключ шифрования должен быть длиной 32 символа")
+        return v
 
 
 class AppSettings(BaseSettings):
@@ -129,13 +92,9 @@ class AppSettings(BaseSettings):
     docs_url: str = Field(default="/docs", description="URL для Swagger документации")
 
     # Настройки разработки
-    debug: bool = Field(default=False, description="Включить отладочный режим")
-    reload: bool = Field(default=False, description="Автоперезагрузка при изменении кода")
-    show_traceback: bool = Field(default=False, description="Показывать трейсбеки в ответах")
-
-    # Мониторинг
-    enable_metrics: bool = Field(default=True, description="Включить сбор метрик")
-    metrics_port: int = Field(default=9090, description="Порт для метрик")
+    debug: bool = Field(default=True, description="Включить отладочный режим")
+    reload: bool = Field(default=True, description="Автоперезагрузка при изменении кода")
+    show_traceback: bool = Field(default=True, description="Показывать трейсбеки в ответах")
 
     @property
     def is_development(self) -> bool:
@@ -156,49 +115,48 @@ class AppSettings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
-        extra="ignore"  # Игнорируем лишние переменные окружения
+        extra="ignore"
     )
 
 
-class Settings:
-    """
-    Главный класс настроек, объединяющий все секции конфигурации.
+class LoggingSettings(BaseSettings):
+    """Настройки логирования."""
 
-    Этот класс создает единую точку доступа ко всем настройкам приложения.
-    При инициализации автоматически загружает и валидирует все настройки.
-    """
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
+        default="INFO",
+        description="Уровень логирования"
+    )
+    format: Literal["json", "text"] = Field(default="json", description="Формат логов")
+    file: Optional[str] = Field(default="logs/app.log", description="Файл для записи логов")
+
+    model_config = SettingsConfigDict(env_prefix="LOG_")
+
+
+class Settings:
+    """Главный класс настроек."""
 
     def __init__(self):
         """Инициализирует все секции настроек."""
         self.app = AppSettings()
         self.database = DatabaseSettings()
-        self.redis = RedisSettings()
         self.security = SecuritySettings()
         self.telegram = TelegramSettings()
-        self.file_storage = FileStorageSettings()
         self.logging = LoggingSettings()
 
     def get_database_url(self) -> str:
         """Возвращает URL подключения к базе данных."""
         return self.database.url
 
-    def get_redis_url(self) -> str:
-        """Возвращает URL подключения к Redis."""
-        return self.redis.url
-
 
 # Создаем глобальный экземпляр настроек
-# Этот объект будет импортироваться в других модулях
 settings = Settings()
 
 # Дополнительные константы для удобства
 DATABASE_URL = settings.get_database_url()
-REDIS_URL = settings.get_redis_url()
 
-# Экспортируем основные настройки для удобного импорта
+# Экспортируем основные настройки
 __all__ = [
     "settings",
     "Settings",
     "DATABASE_URL",
-    "REDIS_URL",
 ]

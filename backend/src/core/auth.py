@@ -1,6 +1,6 @@
+# backend/src/core/auth.py
 """
 Зависимости и функции для авторизации в FastAPI.
-
 Содержит dependency для проверки Telegram авторизации.
 """
 

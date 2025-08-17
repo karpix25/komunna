@@ -1,6 +1,5 @@
 """
 Фабрика для создания Telegram сервисов авторизации.
-
 Управляет различными ботами: главный бот и боты сообществ.
 """
 
@@ -20,10 +19,7 @@ logger = logging.getLogger(__name__)
 class TelegramServiceFactory:
     """
     Фабрика для создания сервисов Telegram авторизации.
-
-    Поддерживает:
-    - Главный бот приложения (токен из .env)
-    - Боты сообществ (токены из БД)
+    Поддерживает главный бот приложения (токен из .env).
     """
 
     def __init__(self):
@@ -37,14 +33,15 @@ class TelegramServiceFactory:
         Returns:
             TelegramAuthService или None если токен не настроен
         """
-        if not settings.telegram.main_bot_token:
+        main_bot_token = settings.telegram.main_bot_token
+        if not main_bot_token:
             logger.warning("❌ Токен главного бота не настроен")
             return None
 
         cache_key = "main_bot"
         if cache_key not in self._services_cache:
             self._services_cache[cache_key] = TelegramAuthService(
-                bot_token=settings.telegram.main_bot_token,
+                bot_token=main_bot_token,
                 bot_type="main"
             )
             logger.info("✅ Создан сервис для главного бота")
@@ -118,10 +115,7 @@ class TelegramServiceFactory:
                 logger.warning(f"❌ Активный бот для сообщества {community_id} не найден")
                 return None
 
-            # TODO: Здесь нужно расшифровать токен
-            # Пока возвращаем как есть, но в продакшене нужно расшифровать
-            # decrypted_token = decrypt_token(bot.token)
-
+            # Возвращаем токен (в будущем здесь будет расшифровка)
             logger.info(f"✅ Получен токен бота для сообщества {community_id}")
             return bot.token
 
