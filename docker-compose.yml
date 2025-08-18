@@ -1,7 +1,5 @@
 # docker-compose.yml для Easypanel
-# ИСПРАВЛЕННАЯ версия для продакшена
-
-version: '3.8'
+# ИСПРАВЛЕННАЯ версия без version и с исправленным frontend
 
 services:
   # Backend API сервер
@@ -94,7 +92,6 @@ services:
     networks:
       - communa_network
     restart: unless-stopped
-    # ИСПРАВЛЕНО: простая команда без сложного экранирования
     command: ["python", "-m", "src.main"]
 
   # PostgreSQL база данных
