@@ -39,31 +39,51 @@ export function useTelegram(): UseTelegramReturn {
         setIsInTelegram(inTelegram)
 
         if (!inTelegram) {
-          // Для тестирования - имитируем пользователя
-          const mockUser: TelegramUser = {
-            id: 123456789,
-            first_name: "Test",
-            username: "testuser"
+          // Для разработки - показываем ошибку, но позволяем продолжить
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('⚠️ Не в Telegram - используем тестовые данные')
+            const mockUser: TelegramUser = {
+              id: 123456789,
+              first_name: "Test User",
+              username: "testuser",
+              language_code: "ru"
+            }
+            setUser(mockUser)
+            setIsValidated(true)
+            setIsLoading(false)
+            return
+          } else {
+            setError('Приложение должно быть запущено из Telegram')
+            setIsLoading(false)
+            return
           }
-          setUser(mockUser)
-          setIsValidated(true)
-          setIsLoading(false)
-          return
         }
 
         // Применяем тему Telegram
         telegram.applyTheme()
 
-        // Получаем пользователя из Telegram (без валидации backend)
-        const telegramUser = telegram.getUser()
+        // Проверяем наличие initData
+        const initData = telegram.getInitData()
+        if (!initData) {
+          setError('Отсутствуют данные авторизации Telegram')
+          setIsLoading(false)
+          return
+        }
+
+        // Валидируем пользователя через backend
+        console.log('🔐 Начинаем валидацию через backend...')
+        const validation = await telegram.validateUser()
         
-        if (telegramUser) {
-          setUser(telegramUser)
-          setIsValidated(true) // Временно считаем валидным
+        if (validation.valid && validation.user) {
+          console.log('✅ Валидация успешна:', validation.user)
+          setUser(validation.user)
+          setIsValidated(true)
         } else {
-          setError('Не удалось получить данные пользователя')
+          console.error('❌ Ошибка валидации:', validation.error)
+          setError(validation.error || 'Ошибка валидации пользователя')
         }
       } catch (err) {
+        console.error('❌ Критическая ошибка:', err)
         setError('Ошибка инициализации Telegram WebApp')
       } finally {
         setIsLoading(false)
