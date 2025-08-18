@@ -1,339 +1,352 @@
-"""
-Главный файл FastAPI приложения.
+# bot/src/main.py
+# ИСПРАВЛЕННАЯ версия Telegram бота
 
-Настраивает и запускает веб-сервер с API для Telegram Skool платформы.
-Инициализирует базу данных, middleware, роуты и обработчики событий.
-"""
-
+import asyncio
 import logging
-import time
-from contextlib import asynccontextmanager
-from typing import AsyncGenerator
-from datetime import datetime
-
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
-import uvicorn
-
-from .config import settings
-from .database import init_database, close_database, check_database_connection
-from .services.dynamic_tables import dynamic_table_manager
+import os
+import aiohttp
+from aiohttp import web
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import Command
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 # Настройка логирования
 logging.basicConfig(
-    level=getattr(logging, settings.logging.level),
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
+# ИСПРАВЛЕННАЯ конфигурация
+BOT_TOKEN = os.getenv("TELEGRAM_MAIN_BOT_TOKEN") or os.getenv("BOT_TOKEN")
+BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """
-    Управление жизненным циклом приложения.
+# ВАЖНО: Правильный URL для WebApp
+WEBAPP_URL = "https://n8n-karpix-communa.g44y6r.easypanel.host"
 
-    Выполняется при запуске и завершении приложения.
-    Инициализирует базу данных и очищает ресурсы.
+if not BOT_TOKEN:
+    raise ValueError("TELEGRAM_MAIN_BOT_TOKEN environment variable is required")
+
+# Инициализация бота и диспетчера
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher()
+
+# Хранилище для временных данных пользователей
+user_validation_data = {}
+
+
+@dp.message(Command("start"))
+async def cmd_start(message: Message):
     """
-    # ========== ЗАПУСК ПРИЛОЖЕНИЯ ==========
-    logger.info(f"🚀 Запуск {settings.app.project_name} в режиме {settings.app.environment}")
+    ИСПРАВЛЕННАЯ команда /start с правильной WebApp кнопкой
+    """
+    user = message.from_user
+
+    # Сохраняем данные пользователя
+    user_validation_data[user.id] = {
+        "telegram_id": str(user.id),
+        "username": user.username,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "is_bot": user.is_bot,
+        "is_premium": getattr(user, 'is_premium', False),
+        "language_code": user.language_code,
+        "last_interaction": message.date.isoformat()
+    }
+
+    # ИСПРАВЛЕННАЯ клавиатура с правильной WebApp кнопкой
+    keyboard = InlineKeyboardBuilder()
+    
+    # ГЛАВНАЯ кнопка для открытия WebApp
+    keyboard.add(InlineKeyboardButton(
+        text="🚀 Открыть Kommuna App",
+        web_app=types.WebAppInfo(url=WEBAPP_URL)
+    ))
+    
+    # Дополнительные кнопки
+    keyboard.add(InlineKeyboardButton(
+        text="🔐 Тест валидации",
+        callback_data=f"validate_{user.id}"
+    ))
+    keyboard.add(InlineKeyboardButton(
+        text="ℹ️ Мои данные",
+        callback_data=f"info_{user.id}"
+    ))
+    
+    # Размещаем кнопки в столбец
+    keyboard.adjust(1)
+
+    welcome_text = f"""
+🎓 Добро пожаловать в Kommuna!
+
+👤 Привет, {user.first_name}!
+
+• **ID:** `{user.id}`
+• **Username:** @{user.username or 'не указан'}
+• **Имя:** {user.first_name or 'не указано'}
+• **Premium:** {'✅' if getattr(user, 'is_premium', False) else '❌'}
+
+🌟 **Kommuna** - это платформа для создания курсов и обучения в Telegram.
+
+**Нажмите кнопку ниже, чтобы открыть приложение!** 👇
+"""
+
+    await message.answer(
+        welcome_text,
+        reply_markup=keyboard.as_markup(),
+        parse_mode="Markdown"
+    )
+
+
+@dp.message(Command("app"))
+async def cmd_app(message: Message):
+    """Быстрый доступ к приложению"""
+    keyboard = InlineKeyboardBuilder()
+    keyboard.add(InlineKeyboardButton(
+        text="🚀 Открыть Kommuna App",
+        web_app=types.WebAppInfo(url=WEBAPP_URL)
+    ))
+
+    await message.answer(
+        "🎓 **Kommuna App**\n\nНажмите кнопку, чтобы открыть приложение:",
+        reply_markup=keyboard.as_markup(),
+        parse_mode="Markdown"
+    )
+
+
+@dp.message(Command("debug"))
+async def cmd_debug(message: Message):
+    """Команда для отладки конфигурации"""
+    user = message.from_user
+    
+    debug_info = f"""
+🔧 **Debug информация:**
+
+**Конфигурация:**
+• Bot Token: `{'✅ Настроен' if BOT_TOKEN else '❌ Отсутствует'}`
+• Backend URL: `{BACKEND_URL}`
+• WebApp URL: `{WEBAPP_URL}`
+• Webhook URL: `{WEBHOOK_URL or 'Не настроен (polling mode)'}`
+
+**Ваши данные:**
+• ID: `{user.id}`
+• Username: `{user.username or 'не указан'}`
+• First Name: `{user.first_name}`
+• Language: `{user.language_code or 'не указан'}`
+• Premium: `{'✅' if getattr(user, 'is_premium', False) else '❌'}`
+
+**Статус в системе:**
+• Сохранен в боте: `{'✅' if user.id in user_validation_data else '❌'}`
+"""
+    
+    keyboard = InlineKeyboardBuilder()
+    keyboard.add(InlineKeyboardButton(
+        text="🚀 Тест WebApp",
+        web_app=types.WebAppInfo(url=WEBAPP_URL)
+    ))
+    
+    await message.answer(
+        debug_info,
+        reply_markup=keyboard.as_markup(),
+        parse_mode="Markdown"
+    )
+
+
+@dp.message(Command("validate"))
+async def cmd_validate(message: Message):
+    """Команда /validate - тест валидации через API"""
+    user = message.from_user
 
     try:
-        # Инициализируем базу данных
-        logger.info("📊 Инициализация базы данных...")
-        await init_database()
+        # Формируем данные для отправки в backend
+        user_data = {
+            "telegram_id": str(user.id),
+            "username": user.username,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "is_premium": getattr(user, 'is_premium', False),
+            "language_code": user.language_code,
+            "validation_method": "telegram_bot_direct"
+        }
 
-        # Проверяем подключение
-        if await check_database_connection():
-            logger.info("✅ База данных готова к работе")
-        else:
-            raise Exception("Не удалось подключиться к базе данных")
+        # Отправляем в backend
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{BACKEND_URL}/api/auth/telegram/bot-validate",
+                json=user_data,
+                headers={"Content-Type": "application/json"}
+            ) as response:
+                if response.status == 200:
+                    result_data = await response.json()
+                    validation_text = f"""
+✅ **Валидация через API успешна!**
 
-        # Здесь можно добавить инициализацию других сервисов
-        # await init_redis()
-        # await init_file_storage()
+📋 **Ваши данные переданы в backend:**
+• Telegram ID: `{user_data['telegram_id']}`
+• Username: `@{user_data['username'] or 'не указан'}`
+• Имя: `{user_data['first_name']}`
+• Premium: `{'✅' if user_data['is_premium'] else '❌'}`
 
-        logger.info(f"🎉 {settings.app.project_name} успешно запущен!")
-        logger.info(f"📡 API доступно по адресу: http://{settings.app.host}:{settings.app.port}")
-        logger.info(f"📚 Документация доступна: http://{settings.app.host}:{settings.app.port}{settings.app.docs_url}")
+🔐 **Данные сохранены в системе Kommuna.**
+"""
+                else:
+                    validation_text = f"❌ **Ошибка API:** {response.status}"
 
     except Exception as e:
-        logger.error(f"❌ Ошибка запуска приложения: {e}")
-        raise
+        validation_text = f"❌ **Ошибка валидации:** {str(e)}"
 
-    # ========== ПРИЛОЖЕНИЕ РАБОТАЕТ ==========
-    yield
+    await message.answer(validation_text, parse_mode="Markdown")
 
-    # ========== ЗАВЕРШЕНИЕ ПРИЛОЖЕНИЯ ==========
-    logger.info("🛑 Завершение работы приложения...")
 
+# Обработчики callback кнопок
+@dp.callback_query(lambda c: c.data.startswith("validate_"))
+async def process_validate_callback(callback_query: types.CallbackQuery):
+    """Обработчик кнопки валидации"""
+    user_id = int(callback_query.data.split("_")[1])
+
+    if callback_query.from_user.id != user_id:
+        await callback_query.answer("❌ Вы можете валидировать только свой аккаунт")
+        return
+
+    await callback_query.message.edit_text(
+        "✅ **Тест валидации запущен!**\n\n" +
+        "🔐 Попробуйте открыть WebApp для проверки полной валидации.",
+        parse_mode="Markdown"
+    )
+    await callback_query.answer()
+
+
+@dp.callback_query(lambda c: c.data.startswith("info_"))
+async def process_info_callback(callback_query: types.CallbackQuery):
+    """Обработчик кнопки информации"""
+    user_id = int(callback_query.data.split("_")[1])
+
+    if callback_query.from_user.id != user_id:
+        await callback_query.answer("❌ Вы можете смотреть только свою информацию")
+        return
+
+    user = callback_query.from_user
+
+    info_text = f"""
+📊 **Ваша информация:**
+
+🆔 **ID:** `{user.id}`
+👤 **Username:** `@{user.username or 'не указан'}`
+📝 **Имя:** `{user.first_name or 'не указано'}`
+📝 **Фамилия:** `{user.last_name or 'не указана'}`
+🌍 **Язык:** `{user.language_code or 'не указан'}`
+⭐ **Premium:** `{'✅ Да' if getattr(user, 'is_premium', False) else '❌ Нет'}`
+
+🔗 **WebApp URL:** `{WEBAPP_URL}`
+"""
+
+    await callback_query.message.edit_text(info_text, parse_mode="Markdown")
+    await callback_query.answer()
+
+
+# Webhook обработчик
+async def webhook_handler(request):
+    """Обработчик webhook запросов от Telegram"""
     try:
-        # Закрываем подключения к базе данных
-        await close_database()
-
-        # Здесь можно добавить очистку других ресурсов
-        # await close_redis()
-        # await cleanup_file_storage()
-
-        logger.info("✅ Приложение завершено корректно")
-
+        update_data = await request.json()
+        update = types.Update(**update_data)
+        await dp.feed_update(bot, update)
+        return web.Response(status=200)
     except Exception as e:
-        logger.error(f"❌ Ошибка при завершении: {e}")
+        logger.error(f"❌ Ошибка обработки webhook: {e}")
+        return web.Response(status=500)
 
 
-def create_application() -> FastAPI:
-    """
-    Создает и настраивает экземпляр FastAPI приложения.
-
-    Returns:
-        FastAPI: Настроенное приложение
-    """
-    # Создаем приложение с настройками
-    app = FastAPI(
-        title=settings.app.project_name,
-        description="API для платформы онлайн обучения в Telegram",
-        version="1.0.0",
-        docs_url=settings.app.docs_url if not settings.app.is_production else None,
-        redoc_url="/redoc" if not settings.app.is_production else None,
-        openapi_url="/openapi.json" if not settings.app.is_production else None,
-        lifespan=lifespan,
-        debug=settings.app.debug
-    )
-
-    # Настраиваем middleware
-    setup_middleware(app)
-
-    # Настраиваем обработчики ошибок
-    setup_exception_handlers(app)
-
-    # Подключаем роуты
-    setup_routes(app)
-
-    return app
+# Функция отправки данных в backend
+async def send_validation_to_backend(user_data: dict):
+    """Отправляет валидированные данные в backend"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{BACKEND_URL}/api/auth/telegram/bot-validate",
+                json=user_data,
+                headers={"Content-Type": "application/json"}
+            ) as response:
+                if response.status == 200:
+                    logger.info(f"✅ Данные пользователя {user_data['telegram_id']} отправлены в backend")
+                else:
+                    logger.error(f"❌ Ошибка отправки в backend: {response.status}")
+    except Exception as e:
+        logger.error(f"❌ Ошибка подключения к backend: {str(e)}")
 
 
-def setup_middleware(app: FastAPI) -> None:
-    """
-    Настраивает middleware для приложения.
+# Основная функция запуска
+async def main():
+    """Основная функция запуска бота"""
+    logger.info("🤖 Запуск Telegram Bot для Kommuna...")
 
-    Args:
-        app: Экземпляр FastAPI приложения
-    """
-    # CORS - разрешаем запросы с фронтенда
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"] if settings.app.is_development else [
-            "http://localhost:3000",  # Замените на ваш домен
-            "http://127.0.0.1:3000",
-            "https://83e3a3ad885a.ngrok-free.app"
-        ],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # Устанавливаем команды бота
+    await bot.set_my_commands([
+        types.BotCommand(command="start", description="🚀 Начать работу с ботом"),
+        types.BotCommand(command="app", description="🎓 Открыть Kommuna App"),
+        types.BotCommand(command="validate", description="🔐 Тест валидации"),
+        types.BotCommand(command="debug", description="🔧 Отладочная информация"),
+    ])
 
-    # Ограничиваем разрешенные хосты в продакшене
-    if settings.app.is_production:
-        app.add_middleware(
-            TrustedHostMiddleware,
-            allowed_hosts=["localhost:3000", "127.0.0.1:3000",  "83e3a3ad885a.ngrok-free.app"]  # Замените на ваши домены
-        )
-
-    # Добавляем custom middleware для логирования запросов
-    @app.middleware("http")
-    async def log_requests(request: Request, call_next):
-        """Логирует входящие HTTP запросы."""
-        start_time = time.time()
-
-        # Выполняем запрос
-        response = await call_next(request)
-
-        # Логируем результат
-        process_time = time.time() - start_time
-        logger.info(
-            f"{request.method} {request.url.path} - "
-            f"Status: {response.status_code} - "
-            f"Time: {process_time:.3f}s"
-        )
-
-        return response
-
-
-def setup_exception_handlers(app: FastAPI) -> None:
-    """
-    Настраивает обработчики ошибок.
-
-    Args:
-        app: Экземпляр FastAPI приложения
-    """
-
-    @app.exception_handler(HTTPException)
-    async def http_exception_handler(request: Request, exc: HTTPException):
-        """Обработчик HTTP ошибок."""
-        logger.warning(f"HTTP {exc.status_code}: {exc.detail} - {request.url}")
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={
-                "error": True,
-                "message": exc.detail,
-                "status_code": exc.status_code
-            }
-        )
-
-    @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(request: Request, exc: RequestValidationError):
-        """Обработчик ошибок валидации."""
-        logger.warning(f"Validation error: {exc.errors()} - {request.url}")
-        return JSONResponse(
-            status_code=422,
-            content={
-                "error": True,
-                "message": "Ошибка валидации данных",
-                "details": exc.errors(),
-                "status_code": 422
-            }
-        )
-
-    @app.exception_handler(Exception)
-    async def general_exception_handler(request: Request, exc: Exception):
-        """Обработчик всех остальных ошибок."""
-        logger.error(f"Unexpected error: {exc} - {request.url}", exc_info=True)
-
-        # В продакшене не показываем детали ошибки
-        if settings.app.is_production:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "error": True,
-                    "message": "Внутренняя ошибка сервера",
-                    "status_code": 500
-                }
-            )
-        else:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "error": True,
-                    "message": "Внутренняя ошибка сервера",
-                    "details": str(exc) if settings.app.show_traceback else None,
-                    "status_code": 500
-                }
-            )
-
-
-def setup_routes(app: FastAPI) -> None:
-    """
-    Подключает все роуты к приложению.
-
-    Args:
-        app: Экземпляр FastAPI приложения
-    """
-
-    # Базовый роут для проверки работоспособности
-    @app.get("/")
-    async def root():
-        """Базовый endpoint для проверки работы API."""
-        return {
-            "message": f"Добро пожаловать в {settings.app.project_name} API!",
-            "version": "1.0.0",
-            "environment": settings.app.environment,
-            "docs": f"{settings.app.docs_url}" if not settings.app.is_production else "Недоступно в продакшене"
-        }
-
-    @app.get("/health")
-    async def health_check():
-        """Endpoint для проверки состояния сервиса."""
-        # Проверяем подключение к базе данных
-        db_healthy = await check_database_connection()
-
-        return {
-            "status": "healthy" if db_healthy else "unhealthy",
-            "database": "connected" if db_healthy else "disconnected",
-            "timestamp": datetime.utcnow().isoformat()
-        }
-
-    # 🆕 ДОБАВЛЕНО: Подключаем API роуты
-    from .api.v1.router import api_router
-    from .api import api_router
-    app.include_router(api_router, prefix="/api/v1")
-    app.include_router(api_router, prefix="/api")
-
-    # Пока добавляем базовые роуты для тестирования
-    setup_test_routes(app)
-
-
-def setup_test_routes(app: FastAPI) -> None:
-    """
-    Временные тестовые роуты для проверки динамических таблиц.
-    Эти роуты будут удалены когда появятся настоящие API endpoints.
-
-    Args:
-        app: Экземпляр FastAPI приложения
-    """
-
-    @app.post("/test/create-community/{community_name}")
-    async def test_create_community(community_name: str):
-        """Тестовый endpoint для создания сообщества."""
+    if WEBHOOK_URL:
+        # Режим webhook для продакшена
+        logger.info("🌐 Настройка webhook для продакшена...")
+        
+        webhook_path = "/webhook"
+        full_webhook_url = f"{WEBHOOK_URL.rstrip('/')}{webhook_path}"
+        
+        await bot.set_webhook(full_webhook_url)
+        logger.info(f"✅ Webhook установлен: {full_webhook_url}")
+        
+        # Создаем веб-сервер
+        app = web.Application()
+        app.router.add_post(webhook_path, webhook_handler)
+        
+        # Health check
+        async def health_check(request):
+            return web.json_response({
+                "status": "ok", 
+                "bot": "running",
+                "webapp_url": WEBAPP_URL,
+                "backend_url": BACKEND_URL
+            })
+        
+        app.router.add_get("/health", health_check)
+        
+        # Запускаем сервер
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', 8001)
+        await site.start()
+        
+        logger.info("🚀 Webhook сервер запущен на порту 8001")
+        logger.info("✅ Бот готов принимать webhook запросы!")
+        
         try:
-            table_key = await dynamic_table_manager.create_new_community_tables(community_name)
-            return {
-                "success": True,
-                "message": f"Сообщество '{community_name}' создано",
-                "table_key": table_key
-            }
-        except Exception as e:
-            logger.error(f"Ошибка создания сообщества: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
-
-    @app.get("/test/community-info/{table_key}")
-    async def test_get_community_info(table_key: str):
-        """Тестовый endpoint для получения информации о сообществе."""
+            await asyncio.Event().wait()
+        except KeyboardInterrupt:
+            logger.info("🛑 Получен сигнал завершения")
+        finally:
+            await runner.cleanup()
+            await bot.session.close()
+    else:
+        # Режим polling для разработки
+        logger.info("🔄 Запуск в режиме polling...")
+        logger.info(f"🌐 WebApp URL: {WEBAPP_URL}")
+        logger.info(f"🔗 Backend URL: {BACKEND_URL}")
+        
         try:
-            info = await dynamic_table_manager.get_community_info(table_key)
-            return info
-        except Exception as e:
-            logger.error(f"Ошибка получения информации: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
-
-    @app.delete("/test/community/{table_key}")
-    async def test_delete_community(table_key: str):
-        """Тестовый endpoint для удаления сообщества."""
-        try:
-            await dynamic_table_manager.delete_community_tables(table_key)
-            return {
-                "success": True,
-                "message": f"Сообщество с ключом '{table_key}' удалено"
-            }
-        except Exception as e:
-            logger.error(f"Ошибка удаления сообщества: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
-
-
-# Создаем экземпляр приложения
-app = create_application()
-
-
-def main():
-    """
-    Точка входа для запуска приложения.
-
-    Используется при запуске через: python -m src.main
-    """
-    import time
-    from datetime import datetime
-
-    uvicorn.run(
-        "src.main:app",
-        host=settings.app.host,
-        port=settings.app.port,
-        reload=settings.app.reload and settings.app.is_development,
-        log_level=settings.logging.level.lower(),
-        access_log=True,
-    )
+            await dp.start_polling(bot)
+        except KeyboardInterrupt:
+            logger.info("🛑 Получен сигнал завершения")
+        finally:
+            await bot.session.close()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("🛑 Бот остановлен пользователем")
