@@ -1,10 +1,17 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Kommuna - Сервис обучения',
   description: 'Создавай курсы и увеличивай активность в сообществе',
-  viewport: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no',
+}
+
+// ИСПРАВЛЕНО: Выносим viewport в отдельный экспорт
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 }
 
 export default function RootLayout({
