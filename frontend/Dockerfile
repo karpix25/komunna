@@ -1,4 +1,4 @@
-# frontend/Dockerfile для продакшена
+# frontend/Dockerfile для продакшена (ИСПРАВЛЕННЫЙ)
 FROM node:18-alpine AS base
 
 # Устанавливаем зависимости только когда нужно
@@ -7,8 +7,11 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Копируем файлы пакетов
-COPY package.json package-lock.json* ./
-RUN npm ci --only=production
+COPY package.json ./
+# ИСПРАВЛЕНО: Генерируем package-lock.json если его нет
+RUN if [ ! -f package-lock.json ]; then npm install --package-lock-only; fi
+COPY package-lock.json* ./
+RUN npm ci --omit=dev
 
 # Стадия сборки
 FROM base AS builder
@@ -18,8 +21,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Устанавливаем все зависимости и собираем
-RUN npm ci
+# ИСПРАВЛЕНО: Устанавливаем все зависимости более надежно
+RUN npm install --legacy-peer-deps
 RUN npm run build
 
 # Продакшн стадия
