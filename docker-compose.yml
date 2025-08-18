@@ -1,95 +1,180 @@
-version: '3.8'
+# docker-compose.dev.yml
+# ИСПРАВЛЕННАЯ версия для отладки проблем с Telegram Mini App
 
 services:
-  # Redis для кэширования
-  redis:
-    image: redis:7-alpine
-    container_name: communaapp_redis_new
-    restart: unless-stopped
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
-    ports:
-      - "6379:6379"
-    networks:
-      - communaapp_network
-
-  # Backend API сервер (подключается к внешней БД EasyPanel)
+  # Backend API сервер для разработки
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile
-      no_cache: true
-    container_name: communaapp_backend_new
-    restart: unless-stopped
+      dockerfile: Dockerfile.dev
+    container_name: communaapp_backend_dev
     ports:
       - "8000:8000"
     environment:
-      - ENVIRONMENT=production
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
-      - DB_NAME=${DB_NAME}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - RELOAD=true
+      - DB_HOST=postgres
+      - DB_NAME=kommuna
+      - DB_USER=owner
+      - DB_PASSWORD=Gfhjkm123.
+      - DB_PORT=5432
       - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - JWT_SECRET_KEY=fa11c75be6628d29470f634f78898ebe5672e642766311f5cc3b49698b1eea8f4ff6891486bf61ad006fd03dec7bb255ca9c92958eeddaa2a7f022306def5591
+      - ENCRYPTION_KEY=6c193a5c8ae272bc707b0999633a14d2
+      - TELEGRAM_WEBHOOK_DOMAIN=https://n8n-karpix-communa.g44y6r.easypanel.host
+      - TELEGRAM_WEBHOOK_SECRET=dev-webhook-secret
+      - TELEGRAM_MAIN_BOT_TOKEN=${TELEGRAM_MAIN_BOT_TOKEN}
+      - LOG_LEVEL=DEBUG  # Увеличиваем детализацию логов
+      - LOG_FORMAT=text  # Более читаемый формат для разработки
+      - UPLOAD_PATH=./uploads
+      - MAX_FILE_SIZE=52428800
     depends_on:
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     volumes:
+      - ./backend/src:/app/src
       - ./logs:/app/logs
       - ./uploads:/app/uploads
     networks:
-      - communaapp_network
+      - communaapp_dev_network
+    restart: unless-stopped
+    # ДОБАВЛЕНО: больше информации в логах
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  # Frontend Next.js приложение
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      no_cache: true
-    container_name: communaapp_frontend_new
+    image: node:18-alpine
+    working_dir: /app
+    ports:
+      - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=https://n8n-karpix-communa.g44y6r.easypanel.host/api
-      - NEXT_PUBLIC_APP_NAME=Kommuna
+      - NODE_ENV=development
+      - NEXT_TELEMETRY_DISABLED=1
+      # ИСПРАВЛЕНО: Правильные URL для валидации
+      - NEXT_PUBLIC_API_URL=https://n8n-karpix-communa.g44y6r.easypanel.host
+      - INTERNAL_API_URL=http://backend:8000
+      # Дополнительные переменные для отладки
+      - NEXT_PUBLIC_DEBUG=true
+      - NEXT_PUBLIC_APP_ENV=development
+      # Хот-релоад настройки
+      - CHOKIDAR_USEPOLLING=1
+      - WATCHPACK_POLLING=true
+      - NPM_FLAGS=--legacy-peer-deps --no-audit --no-fund
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
     depends_on:
       - backend
-    ports:
-      - "3001:3000"
-    restart: unless-stopped
+    command: >
+      sh -lc "set -e;
+      echo '🔧 Frontend Development Mode';
+      echo '📡 API URL: https://n8n-karpix-communa.g44y6r.easypanel.host';
+      if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install;
+      elif [ -f yarn.lock ]; then yarn install;
+      elif [ -f package-lock.json ]; then npm ci $NPM_FLAGS;
+      else npm install $NPM_FLAGS;
+      fi;
+      echo '🚀 Запуск Next.js dev сервера...';
+      npx next dev -H 0.0.0.0 -p 3000"
     networks:
-      - communaapp_network
+      - communaapp_dev_network
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
 
-  # Telegram Bot
+  # 🤖 TELEGRAM BOT СЕРВИС
   bot:
     build:
       context: ./bot
-      dockerfile: Dockerfile
-      no_cache: true
-    container_name: communaapp_bot_new
+      dockerfile: Dockerfile.dev
+    container_name: communaapp_bot_dev
     environment:
-      - BOT_TOKEN=${BOT_TOKEN}
       - TELEGRAM_MAIN_BOT_TOKEN=${TELEGRAM_MAIN_BOT_TOKEN}
-      - API_URL=http://backend:8000
       - BACKEND_URL=http://backend:8000
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
-      - DB_NAME=${DB_NAME}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - WEBHOOK_URL=${WEBHOOK_URL}
+      - LOG_LEVEL=DEBUG  # Больше логов для отладки
+      # ДОБАВЛЕНО: дополнительные переменные для отладки
+      - WEBAPP_URL=https://n8n-karpix-communa.g44y6r.easypanel.host
+      - DEBUG_MODE=true
     depends_on:
-      - backend
-    restart: unless-stopped
+      backend:
+        condition: service_started
     volumes:
+      - ./bot/src:/app/src
       - ./logs:/app/logs
     networks:
-      - communaapp_network
+      - communaapp_dev_network
+    restart: unless-stopped
+    # ДОБАВЛЕНО: команда с отладкой
+    command: >
+      sh -c "
+      echo '🤖 Telegram Bot Development Mode';
+      echo '🔗 Backend URL: http://backend:8000';
+      echo '🌐 WebApp URL: https://n8n-karpix-communa.g44y6r.easypanel.host';
+      echo '🔑 Bot Token: ${TELEGRAM_MAIN_BOT_TOKEN:0:10}...';
+      python -m src.main
+      "
 
-volumes:
-  redis_data:
-    driver: local
+  # PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: communaapp_postgres_dev
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=kommuna
+      - POSTGRES_USER=owner
+      - POSTGRES_PASSWORD=Gfhjkm123.
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    ports:
+      - "5433:5432"
+    networks:
+      - communaapp_dev_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U owner -d kommuna"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-networks:
-  communaapp_network:
-    driver: bridge
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: communaapp_redis_dev
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    networks:
+      - communaapp_dev_network
+    # ДОБАВЛЕНО: базовая конфигурация Redis
+    command: redis-server --appendonly yes --maxmemory 256mb
+
+  # Adminer для управления БД
+  adminer:
+    image: adminer
+    container_name: communaapp_adminer
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - ADMINER_DEFAULT_SERVER=postgres
+      - ADMINER_DESIGN=lucas
+    depends_on:
+      - postgres
+    networks:
+      - communaapp_dev_network
+
+  # ДОБАВЛЕНО: nginx для локального тестирования CORS
+  nginx:
+    image: nginx:alpine
+    container_name: communaapp_nginx_dev
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/dev.conf:/etc/nginx/conf.d/default.conf
