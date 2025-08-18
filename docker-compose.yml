@@ -1,23 +1,6 @@
 version: '3.8'
 
 services:
-  # PostgreSQL база данных
-  postgres:
-    image: postgres:15-alpine
-    container_name: communaapp_postgres
-    restart: unless-stopped
-    environment:
-      - POSTGRES_DB=${DB_NAME:-communaapp}
-      - POSTGRES_USER=${DB_USER:-postgres}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./database/backups:/backups
-    ports:
-      - "5432:5432"
-    networks:
-      - communaapp_network
-
   # Redis для кэширования
   redis:
     image: redis:7-alpine
@@ -31,7 +14,7 @@ services:
     networks:
       - communaapp_network
 
-  # Backend API сервер
+  # Backend API сервер (подключается к внешней БД EasyPanel)
   backend:
     build:
       context: ./backend
@@ -43,15 +26,15 @@ services:
       - "8000:8000"
     environment:
       - ENVIRONMENT=production
-      - DB_HOST=postgres
-      - DB_NAME=${DB_NAME:-communaapp}
-      - DB_USER=${DB_USER:-postgres}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - REDIS_URL=redis://redis:6379/0
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
     depends_on:
-      - postgres
       - redis
     volumes:
       - ./logs:/app/logs
@@ -86,14 +69,16 @@ services:
     container_name: communaapp_bot
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
+      - TELEGRAM_MAIN_BOT_TOKEN=${TELEGRAM_MAIN_BOT_TOKEN}
       - API_URL=http://backend:8000
-      - DB_HOST=postgres
-      - DB_NAME=${DB_NAME:-communaapp}
-      - DB_USER=${DB_USER:-postgres}
+      - BACKEND_URL=http://backend:8000
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - WEBHOOK_URL=${WEBHOOK_URL}
     depends_on:
-      - postgres
       - backend
     restart: unless-stopped
     volumes:
@@ -121,8 +106,6 @@ services:
       - communaapp_network
 
 volumes:
-  postgres_data:
-    driver: local
   redis_data:
     driver: local
 
