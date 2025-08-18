@@ -1,31 +1,28 @@
+# frontend/Dockerfile для продакшена
 FROM node:18-alpine AS base
 
-# Install dependencies only when needed
+# Устанавливаем зависимости только когда нужно
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Copy only package.json (no lock file)
-COPY package.json ./
+# Копируем файлы пакетов
+COPY package.json package-lock.json* ./
+RUN npm ci --only=production
 
-# Install production dependencies and generate new lock file
-RUN npm install --production --legacy-peer-deps
-
-# Build stage
+# Стадия сборки
 FROM base AS builder
 WORKDIR /app
 
-# Copy dependencies from deps stage
+# Копируем зависимости
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Install all dependencies (will generate package-lock.json)
-RUN npm install --legacy-peer-deps
-
-# Build the application
+# Устанавливаем все зависимости и собираем
+RUN npm ci
 RUN npm run build
 
-# Production stage
+# Продакшн стадия
 FROM base AS runner
 WORKDIR /app
 
@@ -35,17 +32,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Create public directory and copy if exists
-RUN mkdir -p ./public
-RUN if [ -d "/app/public" ]; then cp -r /app/public/* ./public/ 2>/dev/null || true; fi
-
-# Create .next directory and set permissions
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
-
-# Copy built application
+# Копируем собранное приложение
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# Копируем public директорию если она существует
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public 2>/dev/null || true
 
 USER nextjs
 
@@ -53,5 +45,9 @@ EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+
+# Добавляем healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/ || exit 1
 
 CMD ["node", "server.js"]
