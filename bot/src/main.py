@@ -5,6 +5,7 @@ import asyncio
 import logging
 import os
 import aiohttp
+from aiohttp import web  # ДОБАВЛЕНО для webhook сервера
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
@@ -19,12 +20,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Конфигурация
-BOT_TOKEN = os.getenv("TELEGRAM_MAIN_BOT_TOKEN")
+BOT_TOKEN = os.getenv("TELEGRAM_MAIN_BOT_TOKEN") or os.getenv("BOT_TOKEN")  # ОБНОВЛЕНО: поддержка обеих переменных
 BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 if not BOT_TOKEN:
-    raise ValueError("TELEGRAM_MAIN_BOT_TOKEN environment variable is required")
+    raise ValueError("TELEGRAM_MAIN_BOT_TOKEN или BOT_TOKEN environment variable is required")
 
 # Инициализация бота и диспетчера
 bot = Bot(token=BOT_TOKEN)
@@ -156,8 +157,12 @@ async def cmd_start(message: Message):
         "last_interaction": message.date.isoformat()
     }
 
-    # Клавиатура для действий
+    # ОБНОВЛЕНО: Клавиатура с WebApp кнопкой
     keyboard = InlineKeyboardBuilder()
+    keyboard.add(InlineKeyboardButton(
+        text="🚀 Открыть Kommuna App",
+        web_app=types.WebAppInfo(url="https://n8n-karpix-communa.g44y6r.easypanel.host")
+    ))
     keyboard.add(InlineKeyboardButton(
         text="🔐 Валидировать аккаунт",
         callback_data=f"validate_{user.id}"
@@ -168,7 +173,7 @@ async def cmd_start(message: Message):
     ))
 
     welcome_text = f"""
-🤖 Добро пожаловать в Communa Bot!
+🎓 Добро пожаловать в Kommuna!
 
 👤 Ваши данные:
 • ID: {user.id}
@@ -176,11 +181,28 @@ async def cmd_start(message: Message):
 • Имя: {user.first_name or 'не указано'}
 • Фамилия: {user.last_name or 'не указана'}
 
-Этот бот используется для валидации пользователей в системе Communa.
+Kommuna - это платформа для создания курсов и обучения в Telegram.
+Нажмите кнопку ниже, чтобы открыть приложение!
 """
 
     await message.answer(
         welcome_text,
+        reply_markup=keyboard.as_markup()
+    )
+
+
+# ДОБАВЛЕНО: Команда для быстрого доступа к приложению
+@dp.message(Command("app"))
+async def cmd_app(message: Message):
+    """Команда /app - быстрый доступ к приложению"""
+    keyboard = InlineKeyboardBuilder()
+    keyboard.add(InlineKeyboardButton(
+        text="🚀 Открыть Kommuna App",
+        web_app=types.WebAppInfo(url="https://n8n-karpix-communa.g44y6r.easypanel.host")
+    ))
+
+    await message.answer(
+        "🎓 Нажмите кнопку, чтобы открыть Kommuna App:",
         reply_markup=keyboard.as_markup()
     )
 
@@ -261,7 +283,7 @@ async def process_validate_callback(callback_query: types.CallbackQuery):
     if result["success"]:
         await callback_query.message.edit_text(
             "✅ Аккаунт успешно валидирован!\n\n" +
-            "Данные отправлены в систему Communa."
+            "Данные отправлены в систему Kommuna."
         )
 
         # Отправляем в backend
@@ -317,6 +339,19 @@ async def send_validation_to_backend(user_data: dict):
         logger.error(f"Ошибка подключения к backend: {str(e)}")
 
 
+# ДОБАВЛЕНО: Webhook handler для продакшена
+async def webhook_handler(request):
+    """Обработчик webhook запросов от Telegram"""
+    try:
+        update_data = await request.json()
+        update = types.Update(**update_data)
+        await dp.feed_update(bot, update)
+        return web.Response(status=200)
+    except Exception as e:
+        logger.error(f"❌ Ошибка обработки webhook: {e}")
+        return web.Response(status=500)
+
+
 # Webhook обработчик для API запросов
 async def handle_validation_request(request_data: dict) -> dict:
     """
@@ -326,27 +361,73 @@ async def handle_validation_request(request_data: dict) -> dict:
     return await BotAPIHandler.validate_user(request_data)
 
 
-# Основная функция запуска
+# ОБНОВЛЕНО: Основная функция запуска
 async def main():
     """Основная функция запуска бота"""
-    logger.info("🤖 Запуск Telegram Bot для валидации пользователей...")
+    logger.info("🤖 Запуск Telegram Bot для Kommuna...")
 
     # Устанавливаем команды бота
     await bot.set_my_commands([
         types.BotCommand(command="start", description="🚀 Начать работу с ботом"),
+        types.BotCommand(command="app", description="🎓 Открыть Kommuna App"),  # ДОБАВЛЕНО
         types.BotCommand(command="validate", description="🔐 Валидировать аккаунт"),
         types.BotCommand(command="info", description="ℹ️ Информация об аккаунте"),
     ])
 
     if WEBHOOK_URL:
-        # Настройка webhook для продакшена
-        await bot.set_webhook(WEBHOOK_URL)
-        logger.info(f"🌐 Webhook установлен: {WEBHOOK_URL}")
+        # ОБНОВЛЕНО: Настройка webhook для продакшена
+        logger.info("🌐 Настройка webhook для продакшена...")
+        
+        # Устанавливаем webhook
+        webhook_path = "/webhook"
+        full_webhook_url = f"{WEBHOOK_URL.rstrip('/')}{webhook_path}"
+        
+        # ИСПРАВЛЕНО: Правильно закрываем aiohttp session
+        async with aiohttp.ClientSession() as session:
+            await bot.set_webhook(full_webhook_url)
+        
+        logger.info(f"✅ Webhook установлен: {full_webhook_url}")
+        
+        # Создаем веб-сервер для webhook
+        app = web.Application()
+        app.router.add_post(webhook_path, webhook_handler)
+        
+        # Добавляем health check
+        async def health_check(request):
+            return web.json_response({"status": "ok", "bot": "running"})
+        
+        app.router.add_get("/health", health_check)
+        
+        # Запускаем сервер
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', 8001)
+        await site.start()
+        
+        logger.info("🚀 Webhook сервер запущен на порту 8001")
+        logger.info("✅ Бот готов принимать webhook запросы!")
+        
+        # Ожидание завершения
+        try:
+            await asyncio.Event().wait()
+        except KeyboardInterrupt:
+            logger.info("🛑 Получен сигнал завершения")
+        finally:
+            await runner.cleanup()
+            await bot.session.close()
     else:
         # Запуск в режиме polling для разработки
         logger.info("🔄 Запуск в режиме polling...")
-        await dp.start_polling(bot)
+        try:
+            await dp.start_polling(bot)
+        except KeyboardInterrupt:
+            logger.info("🛑 Получен сигнал завершения")
+        finally:
+            await bot.session.close()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("🛑 Бот остановлен пользователем")
