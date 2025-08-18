@@ -4,7 +4,7 @@ services:
   # Redis для кэширования
   redis:
     image: redis:7-alpine
-    container_name: communaapp_redis
+    container_name: communaapp_redis_new
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
@@ -20,7 +20,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       no_cache: true
-    container_name: communaapp_backend
+    container_name: communaapp_backend_new
     restart: unless-stopped
     ports:
       - "8000:8000"
@@ -48,7 +48,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       no_cache: true
-    container_name: communaapp_frontend
+    container_name: communaapp_frontend_new
     environment:
       - NEXT_PUBLIC_API_URL=https://n8n-karpix-communa.g44y6r.easypanel.host/api
       - NEXT_PUBLIC_APP_NAME=Kommuna
@@ -66,7 +66,7 @@ services:
       context: ./bot
       dockerfile: Dockerfile
       no_cache: true
-    container_name: communaapp_bot
+    container_name: communaapp_bot_new
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
       - TELEGRAM_MAIN_BOT_TOKEN=${TELEGRAM_MAIN_BOT_TOKEN}
@@ -83,25 +83,6 @@ services:
     restart: unless-stopped
     volumes:
       - ./logs:/app/logs
-    networks:
-      - communaapp_network
-
-  # Nginx прокси сервер
-  nginx:
-    image: nginx:alpine
-    container_name: communaapp_nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
-      - ./nginx/conf.d:/etc/nginx/conf.d
-      - ./nginx/ssl:/etc/nginx/ssl
-      - ./uploads:/var/www/uploads
-    depends_on:
-      - backend
-      - frontend
     networks:
       - communaapp_network
 
