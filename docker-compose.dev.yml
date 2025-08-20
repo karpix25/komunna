@@ -1,150 +1,125 @@
-# docker-compose.dev.yml - ИСПРАВЛЕННАЯ версия без конфликтов
+# docker-compose.yml - ИСПРАВЛЕННАЯ версия без конфликтов
+# Убираем дублирующиеся container_name и ports между всеми файлами
 
 services:
-  # Backend API сервер для разработки
+  # Backend API сервер
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
     # УБРАЛИ container_name чтобы избежать конфликтов
     ports:
-      - "8001:8000"  # ИЗМЕНИЛИ внешний порт для dev
+      - "8002:8000"  # ИЗМЕНИЛИ порт чтобы избежать конфликтов
     environment:
-      - ENVIRONMENT=development
-      - DEBUG=true
-      - RELOAD=true
-      - DB_HOST=postgres
-      - DB_NAME=kommuna
-      - DB_USER=owner
-      - DB_PASSWORD=Gfhjkm123.
-      - DB_PORT=5432
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - RELOAD=false
+      # ИСПОЛЬЗУЕМ ВНЕШНЮЮ БД EASYPANEL
+      - DB_HOST=${DB_HOST}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_PORT=${DB_PORT}
       - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET_KEY=fa11c75be6628d29470f634f78898ebe5672e642766311f5cc3b49698b1eea8f4ff6891486bf61ad006fd03dec7bb255ca9c92958eeddaa2a7f022306def5591
-      - ENCRYPTION_KEY=6c193a5c8ae272bc707b0999633a14d2
-      - TELEGRAM_WEBHOOK_DOMAIN=https://localhost
-      - TELEGRAM_WEBHOOK_SECRET=dev-webhook-secret
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - TELEGRAM_WEBHOOK_DOMAIN=${TELEGRAM_WEBHOOK_DOMAIN}
+      - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
       - TELEGRAM_MAIN_BOT_TOKEN=${TELEGRAM_MAIN_BOT_TOKEN}
       - LOG_LEVEL=INFO
       - LOG_FORMAT=json
       - UPLOAD_PATH=./uploads
       - MAX_FILE_SIZE=52428800
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_started
     volumes:
-      - ./backend/src:/app/src
-      - ./logs:/app/logs
-      - ./uploads:/app/uploads
+      - backend_logs:/app/logs
+      - backend_uploads:/app/uploads
     networks:
-      - communaapp_dev_network
+      - communa_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
+  # Frontend Next.js приложение
   frontend:
-    image: node:18-alpine
-    working_dir: /app
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    # УБРАЛИ container_name чтобы избежать конфликтов
     ports:
-      - "3001:3000"  # ИЗМЕНИЛИ внешний порт для dev
+      - "3005:3000"  # ИСПОЛЬЗУЕМ СВОБОДНЫЙ ПОРТ 3005  # Вернули стандартный порт
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
-      - NEXT_PUBLIC_API_URL=http://localhost:8001  # ОБНОВИЛИ ссылку на новый порт backend
-      - INTERNAL_API_URL=http://backend:8000
-      - CHOKIDAR_USEPOLLING=1
-      - WATCHPACK_POLLING=true
-      - NPM_FLAGS=--legacy-peer-deps --no-audit --no-fund
-    volumes:
-      - ./frontend:/app
-      - frontend_node_modules:/app/node_modules
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+      - NEXT_PUBLIC_APP_ENV=production
     depends_on:
       - backend
-    command: >
-      sh -lc "set -e;
-      if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install;
-      elif [ -f yarn.lock ]; then yarn install;
-      elif [ -f package-lock.json ]; then npm ci $NPM_FLAGS;
-      else npm install $NPM_FLAGS;
-      fi;
-      npx next dev -H 0.0.0.0 -p 3000"
     networks:
-      - communaapp_dev_network
+      - communa_network
     restart: unless-stopped
-    tty: true
-    stdin_open: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
-  # 🤖 TELEGRAM BOT СЕРВИС
+  # Telegram Bot (без внешнего порта)
   bot:
     build:
       context: ./bot
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
     # УБРАЛИ container_name чтобы избежать конфликтов
     environment:
       - TELEGRAM_MAIN_BOT_TOKEN=${TELEGRAM_MAIN_BOT_TOKEN}
       - BACKEND_URL=http://backend:8000
+      - WEBAPP_URL=${TELEGRAM_WEBHOOK_DOMAIN}
       - LOG_LEVEL=INFO
+      - DEBUG_MODE=false
     depends_on:
-      backend:
-        condition: service_started
+      - backend
     volumes:
-      - ./bot/src:/app/src
+      - bot_logs:/app/logs
     networks:
-      - communaapp_dev_network
+      - communa_network
     restart: unless-stopped
+    command: ["python", "-m", "src.main"]
 
-  # PostgreSQL
-  postgres:
-    image: postgres:15-alpine
-    # УБРАЛИ container_name чтобы избежать конфликтов
-    restart: unless-stopped
-    environment:
-      - POSTGRES_DB=kommuna
-      - POSTGRES_USER=owner
-      - POSTGRES_PASSWORD=Gfhjkm123.
-      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
-    volumes:
-      - postgres_dev_data:/var/lib/postgresql/data
-      - ./database/init:/docker-entrypoint-initdb.d
-    ports:
-      - "5434:5432"  # ИЗМЕНИЛИ внешний порт для dev
-    networks:
-      - communaapp_dev_network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U owner -d kommuna"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # Redis
+  # Redis для кэширования
   redis:
     image: redis:7-alpine
     # УБРАЛИ container_name чтобы избежать конфликтов
     restart: unless-stopped
     ports:
-      - "6380:6379"  # ИЗМЕНИЛИ внешний порт для dev
+      - "6381:6379"  # ИЗМЕНИЛИ порт чтобы избежать конфликтов
     networks:
-      - communaapp_dev_network
-
-  # Adminer
-  adminer:
-    image: adminer
-    # УБРАЛИ container_name чтобы избежать конфликтов
-    restart: always
-    ports:
-      - "8080:8080"
-    environment:
-      - ADMINER_DEFAULT_SERVER=postgres
-      - ADMINER_DESIGN=lucas
-    depends_on:
-      - postgres
-    networks:
-      - communaapp_dev_network
+      - communa_network
+    command: redis-server --appendonly yes --maxmemory 256mb
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
 volumes:
-  postgres_dev_data:
+  redis_data:
     driver: local
-  frontend_node_modules:
+  backend_logs:
+    driver: local
+  backend_uploads:
+    driver: local
+  bot_logs:
+    driver: local
 
 networks:
-  communaapp_dev_network:
+  communa_network:
     driver: bridge
