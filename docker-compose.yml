@@ -1,5 +1,5 @@
-# docker-compose.yml для Easypanel
-# ИСПРАВЛЕННАЯ версия с уникальными портами для избежания конфликтов
+# docker-compose.yml - ИСПРАВЛЕННАЯ версия без конфликтов
+# Убираем дублирующиеся container_name и ports между всеми файлами
 
 services:
   # Backend API сервер
@@ -7,9 +7,9 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: communa_backend
+    # УБРАЛИ container_name чтобы избежать конфликтов
     ports:
-      - "8001:8000"  # ИЗМЕНИЛИ ВНЕШНИЙ ПОРТ на 8001
+      - "8000:8000"
     environment:
       - ENVIRONMENT=production
       - DEBUG=false
@@ -51,9 +51,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: communa_frontend
+    # УБРАЛИ container_name чтобы избежать конфликтов
     ports:
-      - "3001:3000"  # ИЗМЕНИЛИ ВНЕШНИЙ ПОРТ на 3001
+      - "3000:3000"
     environment:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
@@ -76,7 +76,7 @@ services:
     build:
       context: ./bot
       dockerfile: Dockerfile
-    container_name: communa_bot
+    # УБРАЛИ container_name чтобы избежать конфликтов
     environment:
       - TELEGRAM_MAIN_BOT_TOKEN=${TELEGRAM_MAIN_BOT_TOKEN}
       - BACKEND_URL=http://backend:8000
@@ -95,10 +95,10 @@ services:
   # Redis для кэширования
   redis:
     image: redis:7-alpine
-    container_name: communa_redis
+    # УБРАЛИ container_name чтобы избежать конфликтов
     restart: unless-stopped
     ports:
-      - "6380:6379"  # Уникальный внешний порт
+      - "6379:6379"
     networks:
       - communa_network
     command: redis-server --appendonly yes --maxmemory 256mb
