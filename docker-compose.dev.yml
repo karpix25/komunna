@@ -1,13 +1,14 @@
-# docker-compose.dev.yml
+# docker-compose.dev.yml - ИСПРАВЛЕННАЯ версия без конфликтов
+
 services:
   # Backend API сервер для разработки
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
-    container_name: communaapp_backend_dev
+    # УБРАЛИ container_name чтобы избежать конфликтов
     ports:
-      - "8000:8000"
+      - "8001:8000"  # ИЗМЕНИЛИ внешний порт для dev
     environment:
       - ENVIRONMENT=development
       - DEBUG=true
@@ -44,18 +45,14 @@ services:
     image: node:18-alpine
     working_dir: /app
     ports:
-      - "3000:3000"
+      - "3001:3000"  # ИЗМЕНИЛИ внешний порт для dev
     environment:
       - NODE_ENV=development
       - NEXT_TELEMETRY_DISABLED=1
-      # Клиент (браузер)
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-      # Серверные вызовы (SSR/API роуты) из контейнера
+      - NEXT_PUBLIC_API_URL=http://localhost:8001  # ОБНОВИЛИ ссылку на новый порт backend
       - INTERNAL_API_URL=http://backend:8000
-      # Хот-релоад на Windows/OneDrive
       - CHOKIDAR_USEPOLLING=1
       - WATCHPACK_POLLING=true
-      # Флаги установки пакетов (в т.ч. обход peer-deps конфликта)
       - NPM_FLAGS=--legacy-peer-deps --no-audit --no-fund
     volumes:
       - ./frontend:/app
@@ -81,7 +78,7 @@ services:
     build:
       context: ./bot
       dockerfile: Dockerfile.dev
-    container_name: communaapp_bot_dev
+    # УБРАЛИ container_name чтобы избежать конфликтов
     environment:
       - TELEGRAM_MAIN_BOT_TOKEN=${TELEGRAM_MAIN_BOT_TOKEN}
       - BACKEND_URL=http://backend:8000
@@ -98,7 +95,7 @@ services:
   # PostgreSQL
   postgres:
     image: postgres:15-alpine
-    container_name: communaapp_postgres_dev
+    # УБРАЛИ container_name чтобы избежать конфликтов
     restart: unless-stopped
     environment:
       - POSTGRES_DB=kommuna
@@ -109,7 +106,7 @@ services:
       - postgres_dev_data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d
     ports:
-      - "5433:5432"
+      - "5434:5432"  # ИЗМЕНИЛИ внешний порт для dev
     networks:
       - communaapp_dev_network
     healthcheck:
@@ -121,17 +118,17 @@ services:
   # Redis
   redis:
     image: redis:7-alpine
-    container_name: communaapp_redis_dev
+    # УБРАЛИ container_name чтобы избежать конфликтов
     restart: unless-stopped
     ports:
-      - "6380:6379"
+      - "6380:6379"  # ИЗМЕНИЛИ внешний порт для dev
     networks:
       - communaapp_dev_network
 
   # Adminer
   adminer:
     image: adminer
-    container_name: communaapp_adminer
+    # УБРАЛИ container_name чтобы избежать конфликтов
     restart: always
     ports:
       - "8080:8080"
