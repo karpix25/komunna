@@ -1,5 +1,5 @@
 # docker-compose.yml для Easypanel
-# ИСПРАВЛЕННАЯ версия без version и с исправленным frontend
+# ИСПРАВЛЕННАЯ версия БЕЗ локального PostgreSQL
 
 services:
   # Backend API сервер
@@ -14,26 +14,26 @@ services:
       - ENVIRONMENT=production
       - DEBUG=false
       - RELOAD=false
-      - DB_HOST=postgres
-      - DB_NAME=kommuna
-      - DB_USER=owner
-      - DB_PASSWORD=Gfhjkm123.
-      - DB_PORT=5432
+      # ИСПОЛЬЗУЕМ ВНЕШНЮЮ БД EASYPANEL
+      - DB_HOST=${DB_HOST}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_PORT=${DB_PORT}
       - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET_KEY=fa11c75be6628d29470f634f78898ebe5672e642766311f5cc3b49698b1eea8f4ff6891486bf61ad006fd03dec7bb255ca9c92958eeddaa2a7f022306def5591
-      - ENCRYPTION_KEY=6c193a5c8ae272bc707b0999633a14d2
-      - TELEGRAM_WEBHOOK_DOMAIN=https://n8n-karpix-communa.g44y6r.easypanel.host
-      - TELEGRAM_WEBHOOK_SECRET=prod-webhook-secret-2024
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - TELEGRAM_WEBHOOK_DOMAIN=${TELEGRAM_WEBHOOK_DOMAIN}
+      - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
       - TELEGRAM_MAIN_BOT_TOKEN=${TELEGRAM_MAIN_BOT_TOKEN}
       - LOG_LEVEL=INFO
       - LOG_FORMAT=json
       - UPLOAD_PATH=./uploads
       - MAX_FILE_SIZE=52428800
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_started
+      # УБИРАЕМ ЗАВИСИМОСТЬ ОТ POSTGRES
     volumes:
       - backend_logs:/app/logs
       - backend_uploads:/app/uploads
@@ -58,7 +58,7 @@ services:
     environment:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
-      - NEXT_PUBLIC_API_URL=https://n8n-karpix-communa.g44y6r.easypanel.host
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
       - NEXT_PUBLIC_APP_ENV=production
     depends_on:
       - backend
@@ -81,7 +81,7 @@ services:
     environment:
       - TELEGRAM_MAIN_BOT_TOKEN=${TELEGRAM_MAIN_BOT_TOKEN}
       - BACKEND_URL=http://backend:8000
-      - WEBAPP_URL=https://n8n-karpix-communa.g44y6r.easypanel.host
+      - WEBAPP_URL=${TELEGRAM_WEBHOOK_DOMAIN}
       - LOG_LEVEL=INFO
       - DEBUG_MODE=false
     depends_on:
@@ -94,36 +94,13 @@ services:
     restart: unless-stopped
     command: ["python", "-m", "src.main"]
 
-  # PostgreSQL база данных
-  postgres:
-    image: postgres:15-alpine
-    container_name: communa_postgres
-    restart: unless-stopped
-    environment:
-      - POSTGRES_DB=kommuna
-      - POSTGRES_USER=owner
-      - POSTGRES_PASSWORD=Gfhjkm123.
-      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./database/init:/docker-entrypoint-initdb.d
-    ports:
-      - "5432:5432"
-    networks:
-      - communa_network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U owner -d kommuna"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Redis для кэширования
+  # Redis для кэширования (ЕДИНСТВЕННАЯ БД В КОНТЕЙНЕРЕ)
   redis:
     image: redis:7-alpine
     container_name: communa_redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6380:6379"  # ИЗМЕНИЛИ ВНЕШНИЙ ПОРТ
     networks:
       - communa_network
     command: redis-server --appendonly yes --maxmemory 256mb
@@ -135,9 +112,10 @@ services:
       timeout: 3s
       retries: 3
 
+# УБИРАЕМ PostgreSQL ПОЛНОСТЬЮ - используем внешнюю БД EasyPanel
+
 volumes:
-  postgres_data:
-    driver: local
+  # УБИРАЕМ postgres_data - не нужен
   redis_data:
     driver: local
   backend_logs:
