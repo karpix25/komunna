@@ -256,9 +256,9 @@ def setup_routes(app: FastAPI) -> None:
         }
 
     # 🆕 ДОБАВЛЕНО: Подключаем API роуты
-    from .api.v1.router import api_router
+    from .api.v1.router import api_router as api_v1_router
     from .api import api_router
-    app.include_router(api_router, prefix="/api/v1")
+    app.include_router(api_v1_router, prefix="/api/v1")
     app.include_router(api_router, prefix="/api")
 
     # Пока добавляем базовые роуты для тестирования
