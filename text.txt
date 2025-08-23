@@ -1,5 +1,0 @@
-            DB_HOST=localhost
-          - DB_NAME=kommuna
-          - DB_USER=owner
-          - DB_PASSWORD=Gfhjkm123.
-          - DB_PORT=5432
