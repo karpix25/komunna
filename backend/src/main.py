@@ -1,26 +1,23 @@
 """
-Главный файл FastAPI приложения.
-
-Настраивает и запускает веб-сервер с API для Telegram Skool платформы.
-Инициализирует базу данных, middleware, роуты и обработчики событий.
+Главный файл FastAPI приложения Kommuna.
+Базовая настройка без эндпоинтов - только здоровье и инициализация БД.
 """
 
+import os
 import logging
-import time
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from urllib.parse import urlparse
 from datetime import datetime
+from typing import AsyncGenerator
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
-import uvicorn
+
+from aiogram import Bot
+from bot.src.main_bot.app import build_dispatcher
 
 from .config import settings
 from .database import init_database, close_database, check_database_connection
-from .services.dynamic_tables import dynamic_table_manager
 
 # Настройка логирования
 logging.basicConfig(
@@ -29,17 +26,86 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+WEBHOOK_PATH = "/bot/webhook"  # <- путь, по которому слушаем
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "")
+
+
+def _build_webhook_url() -> str | None:
+    # Позволяем задать готовый полный URL, если хочешь
+    full = (os.getenv("TELEGRAM_WEBHOOK_URL") or "").strip()
+    if full:
+        return full
+
+    domain = (os.getenv("TELEGRAM_WEBHOOK_DOMAIN") or "").strip()
+    if not domain:
+        return None
+
+    # Принимаем домен в любом виде: "e5940...", "https://e5940.../",
+    # "https://e5940.../что-то" — и приводим к "https://host"
+    parsed = urlparse(domain if domain.startswith("http") else f"https://{domain}")
+    host = parsed.netloc or parsed.path  # если передали просто "e5940..."
+    host = host.rstrip("/")              # убираем хвостовой "/"
+    return f"https://{host}{WEBHOOK_PATH}"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Управление жизненным циклом приложения.
-
-    Выполняется при запуске и завершении приложения.
-    Инициализирует базу данных и очищает ресурсы.
+    Инициализирует БД при запуске и очищает ресурсы при завершении.
     """
     # ========== ЗАПУСК ПРИЛОЖЕНИЯ ==========
     logger.info(f"🚀 Запуск {settings.app.project_name} в режиме {settings.app.environment}")
+
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not token:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is not set")
+
+    bot = Bot(token=token)
+    dp = build_dispatcher()
+
+    def _iter_routers(r):
+        # обойдём дерево рекурсивно
+        for child in getattr(r, "sub_routers", []):
+            yield child
+            yield from _iter_routers(child)
+
+    names = [r.name or "<noname>" for r in _iter_routers(dp)]
+    logger.info("DP routers connected: %s", names)
+
+    await dp.emit_startup(bot=bot)  # <--- важно
+    logger.info("DP startup emitted")
+    app.state.bot = bot
+    app.state.dp = dp
+    logger.info("Aiogram Bot & Dispatcher initialized")
+
+    url = _build_webhook_url()
+    logger.info("Computed webhook URL: %r", url)
+
+    if url:
+        try:
+            await bot.delete_webhook(drop_pending_updates=True)
+            await bot.set_webhook(
+                url=url,
+                secret_token=WEBHOOK_SECRET or None,
+                allowed_updates=["message", "callback_query"],
+            )
+            logger.info("Webhook set to %s", url)
+        except Exception as e:
+            logger.exception("Failed to set webhook: %s", e)
+
+    try:
+        yield
+    finally:
+        # --- shutdown ---
+        try:
+            # ✅ и событие завершения
+            await dp.emit_shutdown(bot=bot)  # <--- важно
+            logger.info("DP shutdown emitted")
+        except Exception:
+            logger.exception("DP shutdown failed")
+        await bot.session.close()
+        logger.info("Bot session closed")
 
     try:
         # Инициализируем базу данных
@@ -52,17 +118,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         else:
             raise Exception("Не удалось подключиться к базе данных")
 
-        # Здесь можно добавить инициализацию других сервисов
-        # await init_redis()
-        # await init_file_storage()
-
         logger.info(f"🎉 {settings.app.project_name} успешно запущен!")
         logger.info(f"📡 API доступно по адресу: http://{settings.app.host}:{settings.app.port}")
-        logger.info(f"📚 Документация доступна: http://{settings.app.host}:{settings.app.port}{settings.app.docs_url}")
+        if not settings.app.is_production:
+            logger.info(f"📚 Документация: http://{settings.app.host}:{settings.app.port}/docs")
+
+        yield
 
     except Exception as e:
         logger.error(f"❌ Ошибка запуска приложения: {e}")
         raise
+    finally:
+        await bot.session.close()
+        logger.info("Bot session closed")
 
     # ========== ПРИЛОЖЕНИЕ РАБОТАЕТ ==========
     yield
@@ -73,13 +141,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         # Закрываем подключения к базе данных
         await close_database()
-
-        # Здесь можно добавить очистку других ресурсов
-        # await close_redis()
-        # await cleanup_file_storage()
-
         logger.info("✅ Приложение завершено корректно")
-
     except Exception as e:
         logger.error(f"❌ Ошибка при завершении: {e}")
 
@@ -87,229 +149,63 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 def create_application() -> FastAPI:
     """
     Создает и настраивает экземпляр FastAPI приложения.
-
-    Returns:
-        FastAPI: Настроенное приложение
     """
     # Создаем приложение с настройками
     app = FastAPI(
         title=settings.app.project_name,
-        description="API для платформы онлайн обучения в Telegram",
+        description="API платформы Kommuna для обучения в Telegram",
         version="1.0.0",
-        docs_url=settings.app.docs_url if not settings.app.is_production else None,
+        docs_url="/docs" if not settings.app.is_production else None,
         redoc_url="/redoc" if not settings.app.is_production else None,
         openapi_url="/openapi.json" if not settings.app.is_production else None,
         lifespan=lifespan,
         debug=settings.app.debug
     )
 
-    # Настраиваем middleware
-    setup_middleware(app)
+    from .api.v1.endpoints.telegram_webhook import router as telegram_webhook_router
+    app.include_router(telegram_webhook_router)
 
-    # Настраиваем обработчики ошибок
-    setup_exception_handlers(app)
-
-    # Подключаем роуты
-    setup_routes(app)
-
-    return app
-
-
-def setup_middleware(app: FastAPI) -> None:
-    """
-    Настраивает middleware для приложения.
-
-    Args:
-        app: Экземпляр FastAPI приложения
-    """
-    # CORS - разрешаем запросы с фронтенда
+    # Настраиваем CORS
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"] if settings.app.is_development else [
-            "http://localhost:3000",  # Замените на ваш домен
-            "http://127.0.0.1:3000",
-            "https://83e3a3ad885a.ngrok-free.app"
+            settings.telegram.webhook_domain,
+            "http://localhost:3000",
         ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
-    # Ограничиваем разрешенные хосты в продакшене
-    if settings.app.is_production:
-        app.add_middleware(
-            TrustedHostMiddleware,
-            allowed_hosts=["localhost:3000", "127.0.0.1:3000",  "83e3a3ad885a.ngrok-free.app"]  # Замените на ваши домены
-        )
+    # Базовые роуты
+    setup_routes(app)
 
-    # Добавляем custom middleware для логирования запросов
-    @app.middleware("http")
-    async def log_requests(request: Request, call_next):
-        """Логирует входящие HTTP запросы."""
-        start_time = time.time()
-
-        # Выполняем запрос
-        response = await call_next(request)
-
-        # Логируем результат
-        process_time = time.time() - start_time
-        logger.info(
-            f"{request.method} {request.url.path} - "
-            f"Status: {response.status_code} - "
-            f"Time: {process_time:.3f}s"
-        )
-
-        return response
-
-
-def setup_exception_handlers(app: FastAPI) -> None:
-    """
-    Настраивает обработчики ошибок.
-
-    Args:
-        app: Экземпляр FastAPI приложения
-    """
-
-    @app.exception_handler(HTTPException)
-    async def http_exception_handler(request: Request, exc: HTTPException):
-        """Обработчик HTTP ошибок."""
-        logger.warning(f"HTTP {exc.status_code}: {exc.detail} - {request.url}")
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={
-                "error": True,
-                "message": exc.detail,
-                "status_code": exc.status_code
-            }
-        )
-
-    @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(request: Request, exc: RequestValidationError):
-        """Обработчик ошибок валидации."""
-        logger.warning(f"Validation error: {exc.errors()} - {request.url}")
-        return JSONResponse(
-            status_code=422,
-            content={
-                "error": True,
-                "message": "Ошибка валидации данных",
-                "details": exc.errors(),
-                "status_code": 422
-            }
-        )
-
-    @app.exception_handler(Exception)
-    async def general_exception_handler(request: Request, exc: Exception):
-        """Обработчик всех остальных ошибок."""
-        logger.error(f"Unexpected error: {exc} - {request.url}", exc_info=True)
-
-        # В продакшене не показываем детали ошибки
-        if settings.app.is_production:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "error": True,
-                    "message": "Внутренняя ошибка сервера",
-                    "status_code": 500
-                }
-            )
-        else:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "error": True,
-                    "message": "Внутренняя ошибка сервера",
-                    "details": str(exc) if settings.app.show_traceback else None,
-                    "status_code": 500
-                }
-            )
+    return app
 
 
 def setup_routes(app: FastAPI) -> None:
-    """
-    Подключает все роуты к приложению.
+    """Настраивает базовые роуты."""
 
-    Args:
-        app: Экземпляр FastAPI приложения
-    """
-
-    # Базовый роут для проверки работоспособности
     @app.get("/")
     async def root():
-        """Базовый endpoint для проверки работы API."""
+        """Базовый endpoint."""
         return {
             "message": f"Добро пожаловать в {settings.app.project_name} API!",
             "version": "1.0.0",
             "environment": settings.app.environment,
-            "docs": f"{settings.app.docs_url}" if not settings.app.is_production else "Недоступно в продакшене"
         }
 
     @app.get("/health")
     async def health_check():
-        """Endpoint для проверки состояния сервиса."""
-        # Проверяем подключение к базе данных
+        """Проверка состояния сервиса."""
         db_healthy = await check_database_connection()
 
         return {
             "status": "healthy" if db_healthy else "unhealthy",
             "database": "connected" if db_healthy else "disconnected",
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
+            "environment": settings.app.environment
         }
-
-    # 🆕 ДОБАВЛЕНО: Подключаем API роуты
-    from .api.v1.router import api_router as api_v1_router
-    from .api import api_router
-    app.include_router(api_v1_router, prefix="/api/v1")
-    app.include_router(api_router, prefix="/api")
-
-    # Пока добавляем базовые роуты для тестирования
-    setup_test_routes(app)
-
-
-def setup_test_routes(app: FastAPI) -> None:
-    """
-    Временные тестовые роуты для проверки динамических таблиц.
-    Эти роуты будут удалены когда появятся настоящие API endpoints.
-
-    Args:
-        app: Экземпляр FastAPI приложения
-    """
-
-    @app.post("/test/create-community/{community_name}")
-    async def test_create_community(community_name: str):
-        """Тестовый endpoint для создания сообщества."""
-        try:
-            table_key = await dynamic_table_manager.create_new_community_tables(community_name)
-            return {
-                "success": True,
-                "message": f"Сообщество '{community_name}' создано",
-                "table_key": table_key
-            }
-        except Exception as e:
-            logger.error(f"Ошибка создания сообщества: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
-
-    @app.get("/test/community-info/{table_key}")
-    async def test_get_community_info(table_key: str):
-        """Тестовый endpoint для получения информации о сообществе."""
-        try:
-            info = await dynamic_table_manager.get_community_info(table_key)
-            return info
-        except Exception as e:
-            logger.error(f"Ошибка получения информации: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
-
-    @app.delete("/test/community/{table_key}")
-    async def test_delete_community(table_key: str):
-        """Тестовый endpoint для удаления сообщества."""
-        try:
-            await dynamic_table_manager.delete_community_tables(table_key)
-            return {
-                "success": True,
-                "message": f"Сообщество с ключом '{table_key}' удалено"
-            }
-        except Exception as e:
-            logger.error(f"Ошибка удаления сообщества: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
 
 
 # Создаем экземпляр приложения
@@ -317,13 +213,8 @@ app = create_application()
 
 
 def main():
-    """
-    Точка входа для запуска приложения.
-
-    Используется при запуске через: python -m src.main
-    """
-    import time
-    from datetime import datetime
+    """Точка входа для запуска приложения."""
+    import uvicorn
 
     uvicorn.run(
         "src.main:app",
@@ -331,7 +222,6 @@ def main():
         port=settings.app.port,
         reload=settings.app.reload and settings.app.is_development,
         log_level=settings.logging.level.lower(),
-        access_log=True,
     )
 
 

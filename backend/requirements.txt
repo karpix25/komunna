@@ -44,5 +44,8 @@ redis==5.0.1
 # Валидация конфигурации
 typing-extensions==4.8.0
 
-# Telegram бот библиотека
-aiogram==3.2.0
+# aiogram 3 для работы с Telegram Bot API
+aiogram==3.4.1
+
+# aiohttp для webhook сервера
+aiohttp==3.9.1

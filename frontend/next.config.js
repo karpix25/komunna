@@ -2,21 +2,23 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
-  // Убираем проблемные настройки
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  // Исправляем предупреждения
-  experimental: {
-    // serverActions убираем - теперь включены по умолчанию
-  },
-  // Убираем проблемную переменную
-  // env: {
-  //   CUSTOM_KEY: process.env.CUSTOM_KEY,
-  // },
-}
 
-module.exports = nextConfig
+  // Главное для Docker (мультистейдж/standalone runner):
+  output: 'standalone',
+
+  // Чтобы не упереться в sharp на Alpine (next/image будет без оптимизации)
+  images: {
+    unoptimized: true,
+  },
+
+  // Сборка не падает из-за линта/типов — как у тебя
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },
+
+  // Опционально: снять заголовок "X-Powered-By: Next.js"
+  poweredByHeader: false,
+
+  // experimental: {} оставляем пустым
+};
+
+module.exports = nextConfig;

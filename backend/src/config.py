@@ -1,6 +1,6 @@
-# backend/src/config.py
 """
-Конфигурация приложения с правильными настройками БД.
+Конфигурация приложения Kommuna.
+Все настройки из переменных окружения.
 """
 
 from typing import Literal, Optional
@@ -14,8 +14,8 @@ class DatabaseSettings(BaseSettings):
     host: str = Field(default="postgres", description="Хост базы данных")
     port: int = Field(default=5432, description="Порт базы данных")
     name: str = Field(default="kommuna", description="Имя базы данных")
-    user: str = Field(default="owner", description="Пользователь БД")
-    password: str = Field(default="Gfhjkm123.", description="Пароль БД")
+    user: str = Field(default="postgres", description="Пользователь БД")
+    password: str = Field(description="Пароль БД")
 
     # Настройки пула подключений
     pool_size: int = Field(default=5, description="Размер пула подключений")
@@ -38,14 +38,12 @@ class DatabaseSettings(BaseSettings):
 class TelegramSettings(BaseSettings):
     """Настройки для работы с Telegram API."""
 
-    webhook_domain: str = Field(default="https://localhost", description="Домен для webhook URL")
-    webhook_secret: str = Field(default="dev-webhook-secret", description="Секрет для webhook безопасности")
-    main_bot_token: Optional[str] = Field(None, description="Токен главного бота приложения")
+    webhook_domain: str = Field(description="Домен для webhook URL")
 
     @property
     def webhook_base_url(self) -> str:
         """Базовый URL для webhooks."""
-        return f"{self.webhook_domain}/api/v1/telegram/webhook"
+        return f"{self.webhook_domain}/webhook"
 
     model_config = SettingsConfigDict(env_prefix="TELEGRAM_")
 
@@ -53,16 +51,10 @@ class TelegramSettings(BaseSettings):
 class SecuritySettings(BaseSettings):
     """Настройки безопасности и авторизации."""
 
-    jwt_secret_key: str = Field(
-        default="fa11c75be6628d29470f634f78898ebe5672e642766311f5cc3b49698b1eea8f4ff6891486bf61ad006fd03dec7bb255ca9c92958eeddaa2a7f022306def5591",
-        description="Секретный ключ для JWT токенов"
-    )
+    jwt_secret_key: str = Field(description="Секретный ключ для JWT токенов")
     jwt_algorithm: str = Field(default="HS256", description="Алгоритм шифрования JWT")
     jwt_access_token_expire_minutes: int = Field(default=1440, description="Время жизни JWT токена (мин)")
-    encryption_key: str = Field(
-        default="6c193a5c8ae272bc707b0999633a14d2",
-        description="Ключ для шифрования конфиденциальных данных"
-    )
+    encryption_key: str = Field(description="Ключ для шифрования конфиденциальных данных")
 
     @field_validator("encryption_key")
     @classmethod
@@ -71,6 +63,10 @@ class SecuritySettings(BaseSettings):
         if len(v) != 32:
             raise ValueError("Ключ шифрования должен быть длиной 32 символа")
         return v
+
+    model_config = SettingsConfigDict(env_prefix="")
+
+    model_config = SettingsConfigDict(env_prefix="")
 
 
 class AppSettings(BaseSettings):
@@ -81,20 +77,15 @@ class AppSettings(BaseSettings):
         default="development",
         description="Режим работы приложения"
     )
-    project_name: str = Field(default="CommunaApp", description="Название проекта")
-    api_version: str = Field(default="v1", description="Версия API")
+    project_name: str = Field(default="Kommuna", description="Название проекта")
 
     # Настройки сервера
     host: str = Field(default="0.0.0.0", description="Хост для запуска сервера")
     port: int = Field(default=8000, description="Порт для запуска сервера")
 
-    # Настройки документации
-    docs_url: str = Field(default="/docs", description="URL для Swagger документации")
-
     # Настройки разработки
-    debug: bool = Field(default=True, description="Включить отладочный режим")
-    reload: bool = Field(default=True, description="Автоперезагрузка при изменении кода")
-    show_traceback: bool = Field(default=True, description="Показывать трейсбеки в ответах")
+    debug: bool = Field(default=False, description="Включить отладочный режим")
+    reload: bool = Field(default=False, description="Автоперезагрузка при изменении кода")
 
     @property
     def is_development(self) -> bool:
@@ -126,8 +117,6 @@ class LoggingSettings(BaseSettings):
         default="INFO",
         description="Уровень логирования"
     )
-    format: Literal["json", "text"] = Field(default="json", description="Формат логов")
-    file: Optional[str] = Field(default="logs/app.log", description="Файл для записи логов")
 
     model_config = SettingsConfigDict(env_prefix="LOG_")
 
@@ -143,20 +132,12 @@ class Settings:
         self.telegram = TelegramSettings()
         self.logging = LoggingSettings()
 
-    def get_database_url(self) -> str:
-        """Возвращает URL подключения к базе данных."""
-        return self.database.url
-
 
 # Создаем глобальный экземпляр настроек
 settings = Settings()
-
-# Дополнительные константы для удобства
-DATABASE_URL = settings.get_database_url()
 
 # Экспортируем основные настройки
 __all__ = [
     "settings",
     "Settings",
-    "DATABASE_URL",
 ]

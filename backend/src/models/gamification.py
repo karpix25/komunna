@@ -84,7 +84,7 @@ class LevelRule(BaseModel):
         Integer,
         unique=True,
         nullable=False,
-        comment="Номер уровня (1, 2, 3, ...)"
+        comment="Номер уровня (README.md, 2, 3, ...)"
     )
 
     # Название уровня

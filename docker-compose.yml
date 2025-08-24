@@ -1,125 +1,90 @@
-# docker-compose.yml - ИСПРАВЛЕННАЯ версия без конфликтов
-# Убираем дублирующиеся container_name и ports между всеми файлами
-
 services:
-  # Backend API сервер
+  # PostgreSQL база данных
+  postgres:
+    image: postgres:15-alpine
+    container_name: kommuna_postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-kommuna}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-kommuna}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - kommuna_network
+
+  # Backend API (FastAPI)
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-    # УБРАЛИ container_name чтобы избежать конфликтов
-    ports:
-      - "8000:8000"
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: kommuna_backend
     environment:
       - ENVIRONMENT=production
-      - DEBUG=false
-      - RELOAD=false
-      # ИСПОЛЬЗУЕМ ВНЕШНЮЮ БД EASYPANEL
-      - DB_HOST=${DB_HOST}
-      - DB_NAME=${DB_NAME}
-      - DB_USER=${DB_USER}
+      - DB_HOST=postgres
+      - DB_NAME=${DB_NAME:-kommuna}
+      - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD}
-      - DB_PORT=${DB_PORT}
-      - REDIS_URL=redis://redis:6379/0
+      - DB_PORT=5432
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_WEBHOOK_DOMAIN=${TELEGRAM_WEBHOOK_DOMAIN}
-      - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
-      - TELEGRAM_MAIN_BOT_TOKEN=${TELEGRAM_MAIN_BOT_TOKEN}
-      - LOG_LEVEL=INFO
-      - LOG_FORMAT=json
-      - UPLOAD_PATH=./uploads
-      - MAX_FILE_SIZE=52428800
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - TELEGRAM_WEBAPP_URL=${TELEGRAM_WEBAPP_URL}
+    ports:
+      - "8000:8000"
     depends_on:
-      redis:
-        condition: service_started
+      postgres:
+        condition: service_healthy
     volumes:
       - backend_logs:/app/logs
-      - backend_uploads:/app/uploads
     networks:
-      - communa_network
+      - kommuna_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
 
-  # Frontend Next.js приложение
+  # Frontend (Next.js)
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    # УБРАЛИ container_name чтобы избежать конфликтов
-    ports:
-      - "3000:3000"
+    container_name: kommuna_frontend
     environment:
       - NODE_ENV=production
-      - NEXT_TELEMETRY_DISABLED=1
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-      - NEXT_PUBLIC_APP_ENV=production
-    depends_on:
-      - backend
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
     networks:
-      - communa_network
+      - kommuna_network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
-
-  # Telegram Bot (без внешнего порта)
-  bot:
-    build:
-      context: ./bot
-      dockerfile: Dockerfile
-    # УБРАЛИ container_name чтобы избежать конфликтов
-    environment:
-      - TELEGRAM_MAIN_BOT_TOKEN=${TELEGRAM_MAIN_BOT_TOKEN}
-      - BACKEND_URL=http://backend:8000
-      - WEBAPP_URL=${TELEGRAM_WEBHOOK_DOMAIN}
-      - LOG_LEVEL=INFO
-      - DEBUG_MODE=false
-    depends_on:
-      - backend
-    volumes:
-      - bot_logs:/app/logs
-    networks:
-      - communa_network
-    restart: unless-stopped
-    command: ["python", "-m", "src.main"]
-
-  # Redis для кэширования
-  redis:
-    image: redis:7-alpine
-    # УБРАЛИ container_name чтобы избежать конфликтов
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    networks:
-      - communa_network
-    command: redis-server --appendonly yes --maxmemory 256mb
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
 
 volumes:
-  redis_data:
+  postgres_data:
     driver: local
   backend_logs:
-    driver: local
-  backend_uploads:
     driver: local
   bot_logs:
     driver: local
 
 networks:
-  communa_network:
+  kommuna_network:
     driver: bridge

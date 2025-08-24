@@ -1,8 +1,6 @@
 """
 Модель глобального пользователя.
-
-Хранит базовую информацию о всех пользователях платформы,
-полученную из Telegram при первой авторизации.
+Хранит базовую информацию о пользователях из Telegram.
 """
 
 from datetime import datetime
@@ -17,9 +15,7 @@ from .base import BaseModelWithSoftDelete
 class User(BaseModelWithSoftDelete):
     """
     Глобальная модель пользователя.
-
     Содержит базовую информацию о пользователе из Telegram.
-    Один пользователь может быть участником множества сообществ.
     """
 
     __tablename__ = "users"
@@ -115,14 +111,6 @@ class User(BaseModelWithSoftDelete):
     ) -> None:
         """
         Обновляет данные пользователя из Telegram.
-
-        Args:
-            username: Новый username
-            first_name: Новое имя
-            last_name: Новая фамилия
-            language_code: Новый код языка
-            photo_url: Новый URL фото
-            is_premium: Новый статус Premium
         """
         if username is not None:
             self.username = username

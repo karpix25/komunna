@@ -1,8 +1,5 @@
 """
 Базовые классы для всех моделей.
-
-Содержит общие миксины и базовый класс, которые используются
-во всех моделях для обеспечения единообразия.
 """
 
 from datetime import datetime
@@ -18,9 +15,6 @@ from ..database import Base
 class TimestampMixin:
     """
     Миксин для добавления временных меток создания и обновления.
-
-    Автоматически добавляет поля created_at и updated_at
-    во все таблицы, которые используют этот миксин.
     """
 
     created_at: Mapped[datetime] = mapped_column(
@@ -43,9 +37,6 @@ class TimestampMixin:
 class SoftDeleteMixin:
     """
     Миксин для мягкого удаления записей.
-
-    Добавляет поле deleted_at, которое позволяет "удалять" записи
-    без физического удаления из базы данных.
     """
 
     deleted_at: Mapped[Optional[datetime]] = mapped_column(
@@ -72,16 +63,11 @@ class SoftDeleteMixin:
 class BaseModel(Base, TimestampMixin):
     """
     Базовый класс для всех моделей.
-
-    Содержит общие поля и методы, которые есть у всех моделей:
-    - Первичный ключ id
-    - Временные метки создания и обновления
-    - Общие методы для работы с моделью
     """
 
-    __abstract__ = True  # Эта модель не создает таблицу
+    __abstract__ = True
 
-    # Первичный ключ - BigInteger для поддержки больших чисел (Telegram ID могут быть большими)
+    # Первичный ключ - BigInteger для поддержки больших чисел (Telegram ID)
     id: Mapped[int] = mapped_column(
         BigInteger,
         primary_key=True,
@@ -96,9 +82,6 @@ class BaseModel(Base, TimestampMixin):
     def to_dict(self) -> dict:
         """
         Преобразует модель в словарь.
-
-        Полезно для сериализации или отладки.
-        Не включает приватные атрибуты и relationship.
         """
         result = {}
         for column in self.__table__.columns:
@@ -109,18 +92,10 @@ class BaseModel(Base, TimestampMixin):
             result[column.name] = value
         return result
 
-    @classmethod
-    def get_table_name(cls) -> str:
-        """Возвращает имя таблицы модели."""
-        return cls.__tablename__
-
 
 class BaseModelWithSoftDelete(BaseModel, SoftDeleteMixin):
     """
     Базовый класс для моделей с мягким удалением.
-
-    Наследуется от BaseModel и добавляет функциональность мягкого удаления.
-    Используется для моделей, где важно сохранить историю удаленных записей.
     """
 
     __abstract__ = True

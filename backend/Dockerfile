@@ -1,44 +1,38 @@
-# backend/Dockerfile для продакшена
 FROM python:3.11-slim
 
-# Устанавливаем переменные окружения
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app
 
-# Устанавливаем рабочую директорию
 WORKDIR /app
 
-# Устанавливаем системные зависимости
-RUN apt-get update && apt-get install -y \
-    build-essential \
+# Системные зависимости (для healthcheck'а нужен curl)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/*
 
-# Копируем файлы зависимостей
-COPY requirements.txt .
+# 1) Python-зависимости backend
+COPY backend/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip \
+ && pip install --no-cache-dir -r /app/requirements.txt
 
-# Устанавливаем Python зависимости
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# 2) Устанавливаем пакет бота (из папки bot)
+#    Ожидается, что в bot/ есть pyproject.toml (как я предлагал).
+COPY bot /app/bot
+RUN pip install --no-cache-dir /app/bot
 
-# Копируем исходный код
-COPY src/ ./src/
+# 3) Исходники backend
+COPY backend/src /app/src
 
-# Создаем директории для логов и загрузок
-RUN mkdir -p logs uploads
-
-# Создаем пользователя для безопасности
-RUN adduser --disabled-password --gecos '' appuser && \
-    chown -R appuser:appuser /app
+# 4) Логи + non-root пользователь
+RUN mkdir -p /app/logs \
+ && adduser --disabled-password --gecos '' appuser \
+ && chown -R appuser:appuser /app
 USER appuser
 
-# Открываем порт
 EXPOSE 8000
 
-# Добавляем healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+  CMD curl -f http://localhost:8000/health || exit 1
 
-# Команда для запуска
 CMD ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
