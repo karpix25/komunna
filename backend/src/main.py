@@ -4,13 +4,14 @@
 """
 
 import os
-import logging
+import logging, traceback
 from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 from datetime import datetime
 from typing import AsyncGenerator
 
 from fastapi import FastAPI
+from fastapi.openapi.utils import get_openapi
 from fastapi.middleware.cors import CORSMiddleware
 
 from aiogram import Bot
@@ -155,22 +156,34 @@ def create_application() -> FastAPI:
         title=settings.app.project_name,
         description="API платформы Kommuna для обучения в Telegram",
         version="1.0.0",
-        docs_url="/docs" if not settings.app.is_production else None,
-        redoc_url="/redoc" if not settings.app.is_production else None,
-        openapi_url="/openapi.json" if not settings.app.is_production else None,
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+        swagger_ui_parameters={"useLocalAssets": True},
+        root_path_in_servers=False,
         lifespan=lifespan,
         debug=settings.app.debug
     )
 
+    logger.warning(
+        "APP START: env=%s is_production=%s debug=%s docs_url=%s openapi_url=%s",
+        settings.app.environment, settings.app.is_production, settings.app.debug,
+        app.docs_url, app.openapi_url
+    )
+
     from .api.v1.endpoints.telegram_webhook import router as telegram_webhook_router
-    app.include_router(telegram_webhook_router)
+    from .api.v1.router import api_router
+    app.include_router(telegram_webhook_router, include_in_schema=False)
+    app.include_router(api_router, prefix="/api/v1")
 
     # Настраиваем CORS
+    ## ЗАМЕНИТЬ allow_origins
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if settings.app.is_development else [
+        allow_origins=[
             settings.telegram.webhook_domain,
             "http://localhost:3000",
+            "https://1b162366c23f.ngrok-free.app",
         ],
         allow_credentials=True,
         allow_methods=["*"],
@@ -179,6 +192,28 @@ def create_application() -> FastAPI:
 
     # Базовые роуты
     setup_routes(app)
+
+    def custom_openapi():
+        try:
+            if app.openapi_schema:
+                return app.openapi_schema
+            openapi_schema = get_openapi(
+                title=app.title,
+                version=app.version,
+                routes=app.routes,
+            )
+            app.openapi_schema = openapi_schema
+            return app.openapi_schema
+        except Exception:
+            logger.error("OpenAPI generation failed:\n%s", traceback.format_exc())
+            # заглушка, чтобы /docs открылся для отладки
+            return {
+                "openapi": "3.0.2",
+                "info": {"title": app.title, "version": app.version},
+                "paths": {},
+            }
+
+    app.openapi = custom_openapi
 
     return app
 

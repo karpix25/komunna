@@ -39,3 +39,4 @@ class WebAppUser(BaseModel):
     is_premium: bool = False
     allows_write_to_pm: Optional[bool] = None
     photo_url: Optional[str] = None
+    

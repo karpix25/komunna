@@ -4,7 +4,7 @@
 """
 
 import logging
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Any, Optional, Mapping
 from contextlib import asynccontextmanager
 
 from sqlalchemy import text, MetaData
@@ -160,6 +160,37 @@ async def close_database() -> None:
     logger.info("✅ Подключения к базе данных закрыты")
 
 
+async def execute_raw_sql(
+    sql: str,
+    params: Optional[Mapping[str, Any]] = None,
+    *,
+    autocommit: bool = True,
+) -> None:
+    """
+    Выполнить произвольный SQL (DDL/DML). Ничего не возвращает.
+    Используется динамическими таблицами для CREATE/DROP/ALTER.
+    """
+    async with engine.begin() as conn:
+        if params:
+            await conn.execute(text(sql), params)
+        else:
+            await conn.execute(text(sql))
+    # engine.begin() сам коммитит транзакцию; autocommit здесь для совместимости с прошлым кодом
+
+
+async def table_exists(table_name: str, schema: str = "public") -> bool:
+    """
+    Проверяет существование таблицы в схеме (по умолчанию public).
+    """
+    query = text("""
+        SELECT to_regclass(:qualified) IS NOT NULL
+    """)
+    qualified = f"{schema}.{table_name}" if schema else table_name
+    async with engine.begin() as conn:
+        res = await conn.execute(query, {"qualified": qualified})
+        return bool(res.scalar())
+
+
 # Экспортируем основные объекты
 __all__ = [
     "Base",
@@ -170,4 +201,6 @@ __all__ = [
     "init_database",
     "close_database",
     "check_database_connection",
+    "execute_raw_sql",
+    "table_exists",
 ]
